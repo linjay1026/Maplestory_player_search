@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
-import { Info, Swords, UserRound } from "lucide-react";
+import { Info, Layers, LayoutGrid, Rows3, Swords, UserRound } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -104,6 +104,32 @@ const rawFieldLabels = {
   symbol_level: "符文等級",
   symbol_description: "符文說明",
 };
+const EQUIPMENT_VIEW_STORAGE_KEY = "equipment-view-mode";
+const equipmentViewModes = ["grid", "list"];
+// 潛能等級配色：傳說=綠、罕見=金黃、稀有=紫、特殊=淺藍。
+// 顏色值統一定義在 globals.css 的 --potential-* 變數（淺色/深色各有一套）。
+const potentialTiers = [
+  { match: "傳說", label: "傳說", text: "text-[var(--potential-legendary)]", chip: "bg-[var(--potential-legendary-soft)] text-[var(--potential-legendary)]" },
+  { match: "罕見", label: "罕見", text: "text-[var(--potential-unique)]", chip: "bg-[var(--potential-unique-soft)] text-[var(--potential-unique)]" },
+  { match: "稀有", label: "稀有", text: "text-[var(--potential-epic)]", chip: "bg-[var(--potential-epic-soft)] text-[var(--potential-epic)]" },
+  { match: "特殊", label: "特殊", text: "text-[var(--potential-rare)]", chip: "bg-[var(--potential-rare-soft)] text-[var(--potential-rare)]" },
+];
+const highlightedStatKeys = new Set(["attack_power", "magic_power", "boss_damage", "ignore_monster_armor", "all_stat", "damage"]);
+// 裝備欄固定部位排位（仿遊戲內裝備視窗，5 欄）；null 代表該格留白。
+const EQUIPMENT_SLOT_LAYOUT = [
+  ["戒指1", null, "帽子", null, "徽章"],
+  ["戒指2", "墜飾2", "臉飾", null, "勳章"],
+  ["戒指3", "墜飾", "眼飾", "耳環", "胸章"],
+  ["戒指4", "武器", "上衣", "肩膀裝飾", "手套"],
+  ["口袋道具", "腰帶", "褲/裙", null, "披風"],
+  ["機器心臟", null, "鞋子", null, "輔助武器"],
+];
+const CASH_EQUIPMENT_SLOT_LAYOUT = [
+  ["帽子", "臉飾", "眼飾", "耳環", "墜飾"],
+  ["上衣", "褲/裙", "鞋子", "手套", "披風"],
+  ["戒指1", "戒指2", "戒指3", "戒指4", "武器"],
+  [null, null, null, null, "輔助武器"],
+];
 const ignoredRawFields = new Set([
   "item_icon",
   "item_shape_icon",
@@ -120,6 +146,7 @@ export function CharacterProfile({ character }) {
   const [tab, setTab] = useState("基本");
   const [displayedTab, setDisplayedTab] = useState("基本");
   const [equipmentPreset, setEquipmentPreset] = useState(1);
+  const [equipmentView, setEquipmentView] = useState("grid");
   const [cashPreset, setCashPreset] = useState(1);
   const [modalItem, setModalItem] = useState(null);
   const [guildData, setGuildData] = useState(null);
@@ -154,6 +181,20 @@ export function CharacterProfile({ character }) {
       document.body.style.overflow = previousOverflow;
     };
   }, [modalItem]);
+
+  useEffect(() => {
+    // Sync from localStorage, which can't be read during SSR render.
+    const stored = localStorage.getItem(EQUIPMENT_VIEW_STORAGE_KEY);
+    if (equipmentViewModes.includes(stored)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEquipmentView(stored);
+    }
+  }, []);
+
+  function changeEquipmentView(mode) {
+    setEquipmentView(mode);
+    localStorage.setItem(EQUIPMENT_VIEW_STORAGE_KEY, mode);
+  }
 
   useGSAP(() => {
     const activeButton = tabButtonRefs.current[tab];
@@ -296,13 +337,34 @@ export function CharacterProfile({ character }) {
         <div className="mt-3 grid gap-3">
           <DarkPanel
             title={`裝備資訊${equipment.length ? `（${equipment.length} 件）` : ""}`}
-            action={<PresetSwitch value={equipmentPreset} onChange={setEquipmentPreset} />}
+            action={
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1">
+                  <ViewModeSwitch value={equipmentView} onChange={changeEquipmentView} />
+                  <button
+                    type="button"
+                    onClick={() => setModalItem({ type: "equipment-all", items: equipment, preset: equipmentPreset })}
+                    disabled={!equipment.length}
+                    aria-label="完整裝備數據"
+                    title="完整裝備數據"
+                    className="flex size-8 items-center justify-center rounded-md bg-[var(--surface-muted)] text-[var(--text-muted)] hover:bg-[var(--surface-soft)] disabled:pointer-events-none disabled:opacity-50"
+                  >
+                    <Layers className="size-4" />
+                  </button>
+                </div>
+                <PresetSwitch value={equipmentPreset} onChange={setEquipmentPreset} />
+              </div>
+            }
           >
-            <EquipmentList items={equipment} onOpen={(item) => setModalItem({ type: "equipment", item })} />
+            {equipmentView === "list" ? (
+              <EquipmentCompactList items={equipment} onOpen={(item) => setModalItem({ type: "equipment", item })} />
+            ) : (
+              <EquipmentIconGrid items={equipment} onOpen={(item) => setModalItem({ type: "equipment", item })} />
+            )}
           </DarkPanel>
 
           <DarkPanel title="現金裝備資訊" action={<PresetSwitch value={cashPreset} onChange={setCashPreset} />}>
-            <IconGrid items={cashEquipment} emptyText="尚無現金裝備資料" onOpen={(item) => setModalItem({ type: "cash", item })} />
+            <CashEquipmentGrid items={cashEquipment} emptyText="尚無現金裝備資料" onOpen={(item) => setModalItem({ type: "cash", item })} />
           </DarkPanel>
 
           <DarkPanel title="符文資訊">
@@ -518,7 +580,194 @@ function ProfileHero({ character, combatPower, onOpenGuild, raw }) {
   );
 }
 
-function EquipmentList({ items, onOpen }) {
+function ViewModeSwitch({ onChange, value }) {
+  const modes = [
+    { key: "grid", icon: LayoutGrid, label: "裝備欄格子模式" },
+    { key: "list", icon: Rows3, label: "簡潔列表模式" },
+  ];
+
+  return (
+    <div className="flex gap-1">
+      {modes.map(({ icon: Icon, key, label }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          aria-pressed={value === key}
+          aria-label={label}
+          title={label}
+          className={`flex size-8 items-center justify-center rounded-md ${value === key ? "bg-primary text-primary-foreground" : "bg-[var(--surface-muted)] text-[var(--text-muted)] hover:bg-[var(--surface-soft)]"}`}
+        >
+          <Icon className="size-4" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function formatStarforce(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? String(number) : "";
+}
+
+function StarforceBadge({ value }) {
+  const stars = formatStarforce(value);
+  if (!stars) return null;
+
+  return (
+    <span className="pointer-events-none absolute left-1 top-1 z-10 rounded bg-black/70 px-1 text-[10px] font-black leading-4 text-[var(--equipment-star-badge)]">
+      ★{stars}
+    </span>
+  );
+}
+
+function StarRow({ starforce }) {
+  const count = Number(starforce);
+  if (!Number.isFinite(count) || count <= 0) return null;
+
+  return <p className="text-center text-[10px] leading-4 tracking-[0.2em] text-[var(--equipment-star)]">{"★".repeat(Math.min(count, 25))}</p>;
+}
+
+function getPotentialTier(grade) {
+  if (!grade) return null;
+  const text = String(grade);
+  return potentialTiers.find((tier) => text.includes(tier.match)) || null;
+}
+
+function EquipmentSlotImage({ fallback, icon, name }) {
+  const [isBroken, setIsBroken] = useState(false);
+
+  if (!icon || isBroken) {
+    return <span className="px-0.5 text-center text-[10px] font-bold leading-tight text-[var(--equipment-text-muted)]">{fallback}</span>;
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={icon} alt={name} className="max-h-full max-w-full object-contain" onError={() => setIsBroken(true)} />
+  );
+}
+
+function getEquipmentSlotKey(item) {
+  return String(item.raw?.item_equipment_slot || item.slot || "").trim();
+}
+
+function getCashEquipmentSlotKey(item) {
+  return String(item.raw?.cash_item_equipment_slot || item.raw?.cash_item_equipment_part || item.slot || "").trim();
+}
+
+function collectLayoutKeys(layout) {
+  return new Set(layout.flat().filter(Boolean));
+}
+
+function buildSlotMap(items, layout, getKey) {
+  const layoutKeys = collectLayoutKeys(layout);
+  const map = {};
+  const overflow = [];
+
+  for (const item of items) {
+    const base = getKey(item);
+    let placed = "";
+
+    if (base && layoutKeys.has(base) && !map[base]) {
+      placed = base;
+    } else if (base) {
+      // 同部位多件（如現金裝備「戒指」重複）依序補進 戒指1~戒指4。
+      for (let n = 1; n <= 4; n += 1) {
+        const candidate = `${base}${n}`;
+        if (layoutKeys.has(candidate) && !map[candidate]) {
+          placed = candidate;
+          break;
+        }
+      }
+    }
+
+    if (placed) {
+      map[placed] = item;
+    } else {
+      overflow.push(item);
+    }
+  }
+
+  return { map, overflow };
+}
+
+function buildEquipmentSlotMap(items) {
+  return buildSlotMap(items, EQUIPMENT_SLOT_LAYOUT, getEquipmentSlotKey);
+}
+
+function buildCashEquipmentSlotMap(items) {
+  return buildSlotMap(items, CASH_EQUIPMENT_SLOT_LAYOUT, getCashEquipmentSlotKey);
+}
+
+function EquipmentSlotCell({ item, onOpen }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(item)}
+      title={item.name}
+      className="relative flex aspect-square items-center justify-center rounded-lg border border-[var(--equipment-slot-border)] bg-[var(--equipment-slot)] p-1.5 shadow-[inset_0_0_10px_var(--shadow-soft)] transition hover:border-[var(--equipment-slot-hover)] focus-visible:border-[var(--equipment-slot-hover)] focus-visible:outline-none"
+    >
+      <StarforceBadge value={item.starforce} />
+      <EquipmentSlotImage icon={item.icon} name={item.name} fallback={item.slot || "裝備"} />
+    </button>
+  );
+}
+
+function SlotGrid({ layout, onOpen, overflow, slotMap }) {
+  return (
+    <div className="rounded-xl border border-[var(--equipment-panel-border)] bg-[var(--equipment-panel)] p-3">
+      <div className="mx-auto max-w-[420px]">
+        <div className="grid grid-cols-5 gap-2">
+          {layout.flat().map((slotKey, index) => {
+            if (!slotKey) return <div key={`blank-${index}`} className="aspect-square" aria-hidden="true" />;
+
+            const item = slotMap[slotKey];
+
+            if (!item) {
+              return (
+                <div
+                  key={`empty-${slotKey}-${index}`}
+                  className="flex aspect-square items-center justify-center rounded-lg border border-[var(--equipment-panel-border)] bg-[var(--equipment-slot-empty)] p-1 shadow-[inset_0_0_10px_var(--shadow-soft)]"
+                >
+                  <span className="text-center text-[10px] font-bold leading-tight text-[var(--equipment-text-muted)]">{slotKey}</span>
+                </div>
+              );
+            }
+
+            return <EquipmentSlotCell key={`${slotKey}-${index}`} item={item} onOpen={onOpen} />;
+          })}
+        </div>
+
+        {overflow.length ? (
+          <>
+            <p className="mt-3 text-xs font-bold text-[var(--equipment-text-muted)]">其他</p>
+            <div className="mt-2 grid grid-cols-5 gap-2">
+              {overflow.map((item, index) => (
+                <EquipmentSlotCell key={`overflow-${item.name}-${index}`} item={item} onOpen={onOpen} />
+              ))}
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function EquipmentIconGrid({ items, onOpen }) {
+  if (!items.length) return <p className="text-sm text-[var(--text-muted)]">尚無裝備資料</p>;
+
+  const { map, overflow } = buildEquipmentSlotMap(items);
+  return <SlotGrid layout={EQUIPMENT_SLOT_LAYOUT} slotMap={map} overflow={overflow} onOpen={onOpen} />;
+}
+
+function CashEquipmentGrid({ emptyText, items, onOpen }) {
+  if (!items.length) return <p className="text-sm text-[var(--text-muted)]">{emptyText}</p>;
+
+  const { map, overflow } = buildCashEquipmentSlotMap(items);
+  return <SlotGrid layout={CASH_EQUIPMENT_SLOT_LAYOUT} slotMap={map} overflow={overflow} onOpen={onOpen} />;
+}
+
+function EquipmentCompactList({ items, onOpen }) {
   if (!items.length) return <p className="text-sm text-[var(--text-muted)]">尚無裝備資料</p>;
 
   return (
@@ -531,7 +780,10 @@ function EquipmentList({ items, onOpen }) {
           className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3 text-left transition hover:border-primary hover:bg-[var(--surface-muted)] focus-visible:ring-3 focus-visible:ring-primary/40"
         >
           <div className="grid grid-cols-[58px_1fr] gap-3">
-            <ItemIcon item={item} fallback="裝備" />
+            <div className="relative">
+              <StarforceBadge value={item.starforce} />
+              <ItemIcon item={item} fallback="裝備" />
+            </div>
             <div className="min-w-0">
               <h4 className="truncate text-sm font-black text-foreground">{item.name}</h4>
               <p className="text-xs text-[var(--text-muted)]">{item.slot}</p>
@@ -540,6 +792,81 @@ function EquipmentList({ items, onOpen }) {
           </div>
         </button>
       ))}
+    </div>
+  );
+}
+
+function EquipmentDetailCards({ items }) {
+  if (!items?.length) return <p className="text-sm text-[var(--text-muted)]">尚無裝備資料</p>;
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {items.map((item, index) => (
+        <div
+          key={`${item.name}-${item.slot}-${index}`}
+          className="relative min-w-0 rounded-xl border border-[var(--equipment-slot-border)] bg-[var(--equipment-card)] p-4 shadow-[inset_0_0_18px_var(--shadow-soft)]"
+        >
+          <StarforceBadge value={item.starforce} />
+          <StarRow starforce={item.starforce} />
+          <h4 className="mt-1 break-words text-center text-base font-black text-[var(--equipment-text)]">
+            {item.name}
+            {item.scrollUpgrade ? <span className="text-[var(--equipment-star)]"> (+{item.scrollUpgrade})</span> : null}
+          </h4>
+
+          <div className="mt-3 flex gap-3">
+            <div className="flex size-16 shrink-0 items-center justify-center rounded-lg border border-[var(--equipment-slot-border)] bg-[var(--equipment-slot)] p-1.5">
+              <EquipmentSlotImage icon={item.icon} name={item.name} fallback={item.slot || "裝備"} />
+            </div>
+            <div className="min-w-0 text-xs leading-5 text-[var(--equipment-text-muted)]">
+              <p>部位：{item.slot || "-"}</p>
+              <p>要求等級：Lv.{item.requiredLevel || "-"}</p>
+              {item.scrollUpgrade ? <p>卷軸強化：{item.scrollUpgrade} 次</p> : null}
+            </div>
+          </div>
+
+          <EquipmentStatRows total={item.totalOption} />
+          <PotentialBlock kind="潛在能力" grade={item.potentialGrade} options={item.potentialOptions} />
+          <PotentialBlock kind="附加潛在能力" grade={item.additionalPotentialGrade} options={item.additionalPotentialOptions} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EquipmentStatRows({ total }) {
+  const keys = Object.keys(optionLabels).filter((key) => Number(total?.[key] || 0) !== 0);
+  if (!keys.length) return null;
+
+  return (
+    <div className="mt-3 grid gap-0.5 border-t border-[var(--equipment-divider)] pt-2 text-xs leading-5">
+      {keys.map((key) => (
+        <div key={key} className="flex justify-between gap-3">
+          <span className="text-[var(--equipment-text-muted)]">{optionLabels[key]}</span>
+          <span className={`font-bold ${highlightedStatKeys.has(key) ? "text-[var(--equipment-star)]" : "text-[var(--equipment-text)]"}`}>{formatSignedOption(total[key], key)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PotentialBlock({ grade, kind, options }) {
+  if (!grade && !options?.length) return null;
+  const tier = getPotentialTier(grade);
+
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--equipment-divider)] bg-[var(--equipment-panel)] p-2.5">
+      <p className={`text-xs font-black ${tier?.text || "text-[var(--equipment-text-muted)]"}`}>
+        {tier ? <span className={`mr-1.5 inline-block rounded px-1.5 py-0.5 text-[10px] leading-none ${tier.chip}`}>{tier.label}</span> : null}
+        {kind}
+        {grade ? `：${grade}` : ""}
+      </p>
+      {options?.length ? (
+        <div className="mt-1 grid gap-0.5 text-xs leading-5 text-[var(--equipment-text)]">
+          {options.map((option, index) => (
+            <p key={`${option}-${index}`} className="break-words">• {option}</p>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -614,7 +941,9 @@ function DetailModal({ data, guildData, guildError, isGuildLoading, onClose }) {
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-h-[88vh] w-[calc(100vw-2rem)] max-w-[720px] overflow-hidden border-[var(--border-subtle)] bg-popover p-0 text-popover-foreground shadow-2xl sm:max-w-[720px]">
+      <DialogContent
+        className={`max-h-[88vh] w-[calc(100vw-2rem)] overflow-hidden border-[var(--border-subtle)] bg-popover p-0 text-popover-foreground shadow-2xl ${data?.type === "equipment-all" ? "max-w-[960px] sm:max-w-[960px]" : "max-w-[720px] sm:max-w-[720px]"}`}
+      >
         {data ? (
           <>
             <DialogHeader className="border-b border-[var(--border-subtle)] px-4 py-3 pr-12">
@@ -622,6 +951,11 @@ function DetailModal({ data, guildData, guildError, isGuildLoading, onClose }) {
             </DialogHeader>
             <ScrollArea className="h-[calc(88vh-56px)]">
               {data.type === "equipment" ? <EquipmentModal item={data.item} /> : null}
+              {data.type === "equipment-all" ? (
+                <div className="p-4">
+                  <EquipmentDetailCards items={data.items} />
+                </div>
+              ) : null}
               {data.type === "cash" ? <GenericItemModal item={data.item} title="現金裝備詳細資訊" /> : null}
               {data.type === "symbol" ? <GenericItemModal item={data.item} title="符文詳細資訊" /> : null}
               {data.type === "guild" ? <GuildDetailModal data={guildData} error={guildError} isLoading={isGuildLoading} /> : null}
@@ -708,7 +1042,8 @@ function EquipmentModal({ item }) {
       </div>
 
       <div className="mt-4 flex gap-4">
-        <div className="flex size-20 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-muted)] p-2">
+        <div className="relative flex size-20 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-muted)] p-2">
+          <StarforceBadge value={item.starforce} />
           {showIcon ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={item.icon} alt={item.name} className="max-h-full max-w-full object-contain" onError={() => setIsIconBroken(true)} />
@@ -726,8 +1061,8 @@ function EquipmentModal({ item }) {
       <OptionRows total={item.totalOption} base={item.baseOption} add={item.addOption} starforce={item.starforceOption} etc={item.etcOption} />
 
       <Divider />
-      <OptionBlock title={`潛在能力：${item.potentialGrade || "-"}`} options={item.potentialOptions} color="text-primary" />
-      <OptionBlock title={`附加潛在能力：${item.additionalPotentialGrade || "-"}`} options={item.additionalPotentialOptions} color="text-[var(--warning)]" />
+      <OptionBlock title={`潛在能力：${item.potentialGrade || "-"}`} options={item.potentialOptions} color={getPotentialTier(item.potentialGrade)?.text || "text-primary"} />
+      <OptionBlock title={`附加潛在能力：${item.additionalPotentialGrade || "-"}`} options={item.additionalPotentialOptions} color={getPotentialTier(item.additionalPotentialGrade)?.text || "text-[var(--warning)]"} />
 
       <Divider />
       <RawFieldList
@@ -1329,6 +1664,7 @@ function formatDate(value) {
 
 function getModalTitle(data) {
   if (data.type === "equipment") return "裝備詳細資訊";
+  if (data.type === "equipment-all") return `裝備預設 ${data.preset || "-"} 詳細資訊（共 ${data.items?.length || 0} 件）`;
   if (data.type === "cash") return "現金裝備詳細資訊";
   if (data.type === "symbol") return "符文詳細資訊";
   if (data.type === "guild") return "公會詳細資訊";

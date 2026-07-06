@@ -98,6 +98,26 @@ body {
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --equipment-panel: oklch(0.945 0.02 86);
+  --equipment-panel-border: var(--border-subtle);
+  --equipment-slot: oklch(1 0 0);
+  --equipment-slot-border: oklch(0.83 0.035 82);
+  --equipment-slot-hover: oklch(0.66 0.12 80);
+  --equipment-slot-empty: oklch(0.92 0.02 86);
+  --equipment-card: oklch(0.99 0.008 87);
+  --equipment-text: var(--foreground);
+  --equipment-text-muted: var(--text-muted);
+  --equipment-divider: var(--border-subtle);
+  --equipment-star: oklch(0.58 0.125 78);
+  --equipment-star-badge: oklch(0.88 0.13 90);
+  --potential-legendary: oklch(0.53 0.15 150);
+  --potential-unique: oklch(0.55 0.13 66);
+  --potential-epic: oklch(0.5 0.26 302);
+  --potential-rare: oklch(0.5 0.13 243);
+  --potential-legendary-soft: oklch(0.96 0.044 157);
+  --potential-unique-soft: oklch(0.96 0.06 96);
+  --potential-epic-soft: oklch(0.95 0.033 307);
+  --potential-rare-soft: oklch(0.95 0.026 237);
 }
 
 .dark {
@@ -144,6 +164,26 @@ body {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --equipment-panel: oklch(0.21 0.03 275);
+  --equipment-panel-border: oklch(0.3 0.04 275);
+  --equipment-slot: oklch(0.27 0.04 275);
+  --equipment-slot-border: oklch(0.37 0.05 275);
+  --equipment-slot-hover: oklch(0.88 0.13 90);
+  --equipment-slot-empty: oklch(0.23 0.03 275);
+  --equipment-card: oklch(0.235 0.035 275);
+  --equipment-text: oklch(0.95 0.015 275);
+  --equipment-text-muted: oklch(0.75 0.04 275);
+  --equipment-divider: oklch(0.32 0.045 275);
+  --equipment-star: oklch(0.88 0.13 90);
+  --equipment-star-badge: oklch(0.88 0.13 90);
+  --potential-legendary: oklch(0.85 0.16 150);
+  --potential-unique: oklch(0.88 0.13 90);
+  --potential-epic: oklch(0.76 0.14 300);
+  --potential-rare: oklch(0.84 0.1 230);
+  --potential-legendary-soft: oklch(0.3 0.06 150);
+  --potential-unique-soft: oklch(0.3 0.06 85);
+  --potential-epic-soft: oklch(0.28 0.09 300);
+  --potential-rare-soft: oklch(0.3 0.06 230);
 }
 
 @layer base {
