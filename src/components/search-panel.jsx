@@ -1,38 +1,32 @@
+"use client";
+
 import { useState } from "react";
-import { CalendarDays, Clock3, Loader2, RefreshCw, Search, Sparkles } from "lucide-react";
+import { CalendarDays, Clock3, History, Loader2, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export function SearchPanel({
-  characters,
   error,
-  isListLoading,
+  historyCount,
   isLoading,
   name,
   onNameChange,
-  onRefreshCharacters,
+  onOpenHistory,
   onSearch,
+  onSelectedDateChange,
+  selectedDate,
 }) {
+  const today = new Date().toISOString().slice(0, 10);
+
   function handleSubmit(event) {
     event.preventDefault();
     onSearch();
   }
 
   return (
-    <div className="flex flex-col justify-center">
-      <div className="mb-5 inline-flex w-fit items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-card px-3 py-1.5 text-sm font-medium text-primary shadow-sm">
-        <Sparkles className="size-4 text-primary" />
-        新楓之谷角色資料查詢
-      </div>
-
-      <h1 className="max-w-xl text-4xl font-black leading-tight tracking-normal text-foreground sm:text-5xl">
-        查詢角色並自動建立紀錄
-      </h1>
-
-      <p className="mt-5 max-w-xl text-base leading-7 text-[var(--text-muted)]">
-        輸入角色名稱後，系統會取得 OCID 並查詢角色公開資料。查詢成功的角色會自動加入下方紀錄清單。
-      </p>
-
-      <form onSubmit={handleSubmit} className="mt-7 max-w-xl rounded-lg border border-[var(--border-subtle)] bg-card p-3 shadow-[0_18px_50px_var(--shadow-soft)]">
+    <div>
+      <form onSubmit={handleSubmit} className="rounded-lg border border-[var(--border-subtle)] bg-card p-3 shadow-[0_18px_50px_var(--shadow-soft)]">
         <div className="flex flex-col gap-3 sm:flex-row">
           <label className="sr-only" htmlFor="character-name">
             角色名稱
@@ -44,8 +38,26 @@ export function SearchPanel({
             placeholder="輸入角色名稱"
             className="h-12 min-w-0 flex-1 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-soft)] px-4 text-base text-foreground outline-none transition focus:border-primary focus:ring-3 focus:ring-primary/20"
           />
-          <Button type="button" variant="outline" className="h-12 rounded-md px-3" title="資料日期目前由環境變數設定">
-            <CalendarDays className="size-5" />
+          <label
+            className="flex h-12 items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-soft)] px-3 transition focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20"
+            title="選擇查詢日期（留空使用預設日期）"
+          >
+            <CalendarDays className="size-5 shrink-0 text-[var(--text-muted)]" />
+            <span className="sr-only">查詢日期</span>
+            <input
+              type="date"
+              value={selectedDate}
+              max={today}
+              onChange={(event) => onSelectedDateChange(event.target.value)}
+              className="bg-transparent text-sm text-foreground outline-none"
+            />
+          </label>
+          <Button type="button" variant="outline" className="h-12 gap-2 rounded-md px-4" onClick={onOpenHistory}>
+            <History className="size-5" />
+            <span className="hidden sm:inline">查詢紀錄</span>
+            {historyCount ? (
+              <span className="rounded-full bg-primary px-1.5 text-xs font-black text-primary-foreground">{historyCount}</span>
+            ) : null}
           </Button>
           <Button type="submit" disabled={isLoading} className="h-12 rounded-md px-5 text-base font-semibold">
             {isLoading ? <Loader2 className="size-5 animate-spin" /> : <Search className="size-5" />}
@@ -55,54 +67,64 @@ export function SearchPanel({
       </form>
 
       {error ? (
-        <p className="mt-5 max-w-xl rounded-md border border-[var(--danger)]/40 bg-[var(--danger-soft)] px-4 py-3 text-sm font-medium text-[var(--danger)]">
+        <p className="mt-3 rounded-md border border-[var(--danger)]/40 bg-[var(--danger-soft)] px-4 py-3 text-sm font-medium text-[var(--danger)]">
           {error}
         </p>
       ) : null}
+    </div>
+  );
+}
 
-      <section className="mt-6 max-w-xl rounded-lg border border-[var(--border-subtle)] bg-card p-4 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-black text-foreground">已查詢角色</h2>
-            <p className="text-sm text-[var(--text-muted)]">這裡只會列出使用者查詢成功後留下的紀錄。</p>
-          </div>
-          <Button type="button" variant="outline" size="icon-sm" onClick={onRefreshCharacters} disabled={isListLoading}>
+export function SearchHistoryDialog({ characters, isListLoading, onOpenChange, onRefresh, onSelect, open }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] w-[calc(100vw-2rem)] max-w-[560px] overflow-hidden border-[var(--border-subtle)] bg-popover p-0 text-popover-foreground shadow-2xl sm:max-w-[560px]">
+        <DialogHeader className="border-b border-[var(--border-subtle)] px-4 py-3 pr-12">
+          <DialogTitle className="text-base font-black text-foreground">查詢紀錄</DialogTitle>
+        </DialogHeader>
+
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--border-subtle)] px-4 py-3">
+          <p className="text-sm text-[var(--text-muted)]">這裡只會列出使用者查詢成功後留下的紀錄。</p>
+          <Button type="button" variant="outline" size="icon-sm" onClick={onRefresh} disabled={isListLoading}>
             {isListLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
           </Button>
         </div>
 
-        <div className="mt-4 grid gap-2">
-          {isListLoading ? (
-            <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3 text-sm text-[var(--text-muted)]">載入紀錄中...</div>
-          ) : characters.length ? (
-            characters.map((item) => (
-              <button
-                key={item.ocid || `${item.world}-${item.name}`}
-                type="button"
-                onClick={() => onSearch(item.name)}
-                className="grid grid-cols-[42px_1fr_auto] items-center gap-3 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3 text-left transition hover:border-primary"
-              >
-                <CharacterAvatar image={item.image} name={item.name} />
-                <span>
-                  <span className="block truncate font-bold text-foreground">{item.name}</span>
-                  <span className="block truncate text-sm text-[var(--text-muted)]">
-                    {item.world || "未知伺服器"} · {item.className || "未知職業"} · Lv.{item.level || "-"}
+        <ScrollArea className="max-h-[60vh]">
+          <div className="grid gap-2 p-4">
+            {isListLoading ? (
+              <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3 text-sm text-[var(--text-muted)]">載入紀錄中...</div>
+            ) : characters.length ? (
+              characters.map((item) => (
+                <button
+                  key={item.ocid || `${item.world}-${item.name}`}
+                  type="button"
+                  onClick={() => onSelect(item.name, item.dataDate)}
+                  className="grid grid-cols-[42px_1fr_auto] items-center gap-3 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3 text-left transition hover:border-primary"
+                >
+                  <CharacterAvatar image={item.image} name={item.name} />
+                  <span className="min-w-0">
+                    <span className="block truncate font-bold text-foreground">{item.name}</span>
+                    <span className="block truncate text-sm text-[var(--text-muted)]">
+                      {item.world || "未知伺服器"} · {item.className || "未知職業"} · Lv.{item.level || "-"}
+                    </span>
                   </span>
-                </span>
-                <span className="text-right text-xs text-[var(--text-muted)]">
-                  <Clock3 className="ml-auto size-4" />
-                  {formatDate(item.searchedAt)}
-                </span>
-              </button>
-            ))
-          ) : (
-            <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3 text-sm text-[var(--text-muted)]">
-              目前還沒有查詢紀錄。搜尋一個角色後，這裡就會新增一筆。
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
+                  <span className="text-right text-xs text-[var(--text-muted)]">
+                    <Clock3 className="ml-auto size-4" />
+                    {formatDate(item.searchedAt)}
+                    {item.dataDate ? <span className="block">資料日期 {String(item.dataDate).slice(0, 10)}</span> : null}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3 text-sm text-[var(--text-muted)]">
+                目前還沒有查詢紀錄。搜尋一個角色後，這裡就會新增一筆。
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -111,7 +133,7 @@ function CharacterAvatar({ image, name }) {
   const showImage = Boolean(image) && !isBroken;
 
   return (
-    <div className="flex size-10 items-center justify-center rounded-md bg-[var(--surface-muted)]">
+    <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[var(--surface-muted)]">
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={image} alt={name} className="max-h-full max-w-full object-contain" onError={() => setIsBroken(true)} />

@@ -12,6 +12,12 @@
       "sourceType": "github",
       "skillPath": "skills/gsap-react/SKILL.md",
       "computedHash": "255206fb6a4a079ad73b4a12e7c63197dc451a8549c7ac4e852b50ff74ef3bd6"
+    },
+    "pixijs": {
+      "source": "pixijs/pixijs-skills",
+      "sourceType": "github",
+      "skillPath": "skills/pixijs/SKILL.md",
+      "computedHash": "d187d0be6ba67bc2be92805b4799fd3caac6850d4b8d9adaa99acbe0195e6607"
     }
   }
 }

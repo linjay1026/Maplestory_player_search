@@ -1,9 +1,10 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
-import { Info, Layers, LayoutGrid, Rows3, Swords, UserRound } from "lucide-react";
+import { Gem, Info, Layers, LayoutGrid, Rows3, Share2, Shield, Swords, Trophy, UserRound } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,9 +14,15 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 
+// PixiJS 需要瀏覽器環境（canvas/WebGL），SSR 階段不能執行，關閉 ssr 並在載入時顯示對應大小的骨架佔位。
+const UnionRaiderPixiBoard = dynamic(
+  () => import("@/components/union-raider-pixi-board").then((mod) => mod.UnionRaiderPixiBoard),
+  { ssr: false, loading: () => <Skeleton className="mx-auto h-[480px] w-[528px] max-w-full rounded-lg" /> },
+);
+
 gsap.registerPlugin(useGSAP);
 
-const tabs = ["基本", "裝備", "技能", "其他"];
+const tabs = ["基本", "裝備", "技能", "聯盟戰地", "其他"];
 const percentStatNames = [
   "最終傷害",
   "傷害",
@@ -148,7 +155,10 @@ export function CharacterProfile({ character }) {
   const [equipmentPreset, setEquipmentPreset] = useState(1);
   const [equipmentView, setEquipmentView] = useState("grid");
   const [cashPreset, setCashPreset] = useState(1);
+  const [hyperStatPreset, setHyperStatPreset] = useState(1);
+  const [abilityPreset, setAbilityPreset] = useState(1);
   const [modalItem, setModalItem] = useState(null);
+  const [isShareOpen, setIsShareOpen] = useState(false);
   const [guildData, setGuildData] = useState(null);
   const [guildError, setGuildError] = useState("");
   const [isGuildLoading, setIsGuildLoading] = useState(false);
@@ -168,7 +178,6 @@ export function CharacterProfile({ character }) {
   const symbols = normalizeSymbols(raw.symbolEquipment);
   const skills = normalizeSkills(raw.skill);
   const linkSkills = normalizeSkills(raw.linkSkill);
-  const familiars = normalizeGenericIcons(raw.familiar, ["familiar"], "萌獸");
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -318,11 +327,15 @@ export function CharacterProfile({ character }) {
           </DarkPanel>
 
           <div className="grid gap-3">
-            <DarkPanel title="極限屬性" preset>
-              <TextList items={normalizeHyperStats(raw.hyperStat)} emptyText="尚無極限屬性資料" tone="pill" />
+            <DarkPanel title="極限屬性" action={<PresetSwitch value={hyperStatPreset} onChange={setHyperStatPreset} />}>
+              <TextList items={normalizeHyperStats(raw.hyperStat, hyperStatPreset)} emptyText="尚無極限屬性資料" tone="pill" />
             </DarkPanel>
-            <DarkPanel title="內在潛能" subtitle={raw.ability?.remain_fame ? `剩餘名聲值：${formatInteger(raw.ability.remain_fame)}` : ""} preset>
-              <TextList items={normalizeAbility(raw.ability)} emptyText="尚無能力資料" tone="highlight" />
+            <DarkPanel
+              title="內在潛能"
+              subtitle={raw.ability?.remain_fame ? `剩餘名聲值：${formatInteger(raw.ability.remain_fame)}` : ""}
+              action={<PresetSwitch value={abilityPreset} onChange={setAbilityPreset} />}
+            >
+              <TextList items={normalizeAbility(raw.ability, abilityPreset)} emptyText="尚無能力資料" tone="highlight" />
             </DarkPanel>
             <DarkPanel title="性向資訊">
               <StatGrid rows={objectToRows(raw.propensity, ["date"])} />
@@ -393,6 +406,19 @@ export function CharacterProfile({ character }) {
       );
     }
 
+    if (currentTab === "聯盟戰地") {
+      return (
+        <div className="mt-3">
+          <UnionTab
+            artifactData={raw.unionArtifact}
+            championData={raw.unionChampion}
+            raiderData={raw.unionRaider}
+            unionData={raw.union}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className="mt-3 grid gap-3">
         <DarkPanel title="套裝效果資訊">
@@ -402,8 +428,7 @@ export function CharacterProfile({ character }) {
           <StatGrid rows={objectToRows(raw.dojang, ["date"])} />
         </DarkPanel>
         <DarkPanel title="萌獸資訊">
-          <IconGrid items={familiars} emptyText="尚無萌獸資料" />
-          <RawPreview data={raw.familiar} emptyText="" compact />
+          <FamiliarSection data={raw.familiar} />
         </DarkPanel>
         <DarkPanel title="API 取得狀態">
           <EndpointStatus status={raw._detailStatus} />
@@ -413,10 +438,10 @@ export function CharacterProfile({ character }) {
   }
 
   return (
-    <section className="w-full max-w-[900px]">
-      <ProfileHero character={character} combatPower={combatPower} onOpenGuild={openGuildDetail} raw={raw} />
+    <section className="w-full max-w-[1200px]">
+      <ProfileHero character={character} combatPower={combatPower} onOpenGuild={openGuildDetail} onOpenShare={() => setIsShareOpen(true)} raw={raw} />
 
-      <div ref={tabListRef} role="tablist" className="relative mt-3 grid grid-cols-4 overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-1">
+      <div ref={tabListRef} role="tablist" className="relative mt-3 grid grid-cols-5 overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-1">
         <div
           ref={tabIndicatorRef}
           aria-hidden="true"
@@ -460,13 +485,20 @@ export function CharacterProfile({ character }) {
           setGuildError("");
         }}
       />
+      <ShareCharacterDialog
+        character={character}
+        combatPower={combatPower}
+        onOpenChange={setIsShareOpen}
+        open={isShareOpen}
+        raw={raw}
+      />
     </section>
   );
 }
 
 export function CharacterProfileSkeleton() {
   return (
-    <section className="w-full max-w-[900px]" aria-hidden="true">
+    <section className="w-full max-w-[1200px]" aria-hidden="true">
       <section className="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-card shadow-[0_28px_80px_var(--shadow-soft)]">
         <div className="grid gap-6 p-5 lg:grid-cols-[160px_1fr]">
           <div className="flex flex-col items-center text-center">
@@ -481,8 +513,8 @@ export function CharacterProfileSkeleton() {
               <Skeleton className="h-9 w-24" />
               <Skeleton className="h-4 w-32" />
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              {["基本資訊", "戰鬥資訊", "紀錄資訊"].map((title) => (
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {["基本資訊", "戰鬥資訊"].map((title) => (
                 <div key={title} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
                   <Skeleton className="mb-3 h-4 w-16" />
                   <div className="grid gap-2">
@@ -497,7 +529,7 @@ export function CharacterProfileSkeleton() {
         </div>
       </section>
 
-      <div className="mt-3 grid grid-cols-4 gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-1">
+      <div className="mt-3 grid grid-cols-5 gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-1">
         {tabs.map((item) => (
           <Skeleton key={item} className="h-9 rounded-md" />
         ))}
@@ -530,12 +562,21 @@ export function CharacterProfileSkeleton() {
   );
 }
 
-function ProfileHero({ character, combatPower, onOpenGuild, raw }) {
+function ProfileHero({ character, combatPower, onOpenGuild, onOpenShare, raw }) {
   const [isImageBroken, setIsImageBroken] = useState(false);
   const showImage = Boolean(character?.image) && !isImageBroken;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-card shadow-[0_28px_80px_var(--shadow-soft)]">
+    <section className="relative overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-card shadow-[0_28px_80px_var(--shadow-soft)]">
+      <button
+        type="button"
+        onClick={onOpenShare}
+        disabled={!character}
+        className="absolute right-4 top-4 z-10 inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-soft)] px-3 py-2 text-sm font-bold text-primary shadow-sm transition hover:bg-[var(--surface-muted)] disabled:pointer-events-none disabled:opacity-50"
+      >
+        <Share2 className="size-4" />
+        分享
+      </button>
       <div className="grid gap-6 p-5 text-foreground lg:grid-cols-[160px_1fr]">
         <div className="text-center">
           <div className="mx-auto flex size-32 items-center justify-center rounded-lg bg-[var(--surface-muted)]">
@@ -567,12 +608,11 @@ function ProfileHero({ character, combatPower, onOpenGuild, raw }) {
         <div>
           <div className="flex flex-wrap items-end gap-2">
             <span className="text-3xl font-black">Lv. {formatInteger(character?.level) || "-"}</span>
-            <span className="pb-1 text-sm text-primary">資料日期：{character?.updatedAt || "-"}</span>
+            <span className="pb-1 text-sm text-primary">資料日期：{formatDate(character?.updatedAt)}</span>
           </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <SummaryCard title="基本資訊" rows={[["伺服器", character?.world], ["職業", character?.className], ["公會", character?.guild]]} />
             <SummaryCard title="戰鬥資訊" rows={[["戰鬥力", combatPower], ["名聲", raw.popularity?.popularity], ["武陵", raw.dojang?.dojang_best_floor ? `${raw.dojang.dojang_best_floor}F` : "-"]]} />
-            <SummaryCard title="紀錄資訊" rows={[["OCID", character?.ocid ? `${character.ocid.slice(0, 8)}...` : "-"], ["查詢日期", formatDate(character?.updatedAt)], ["資料狀態", character ? "已取得" : "-"]]} />
           </div>
         </div>
       </div>
@@ -967,6 +1007,119 @@ function DetailModal({ data, guildData, guildError, isGuildLoading, onClose }) {
   );
 }
 
+function ShareCharacterDialog({ character, combatPower, onOpenChange, open, raw }) {
+  const [copyState, setCopyState] = useState("idle");
+  const shareUrl = useMemo(() => buildCharacterShareUrl(character), [character]);
+
+  async function handleCopy() {
+    if (!shareUrl) return;
+
+    try {
+      await copyToClipboard(shareUrl);
+      setCopyState("copied");
+      window.setTimeout(() => setCopyState("idle"), 1500);
+    } catch {
+      setCopyState("error");
+      window.setTimeout(() => setCopyState("idle"), 2200);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-[760px] overflow-hidden border-[var(--border-subtle)] bg-popover p-0 text-popover-foreground shadow-2xl sm:max-w-[760px]">
+        <DialogHeader className="border-b border-[var(--border-subtle)] px-4 py-3 pr-12">
+          <DialogTitle className="text-base font-black text-foreground">分享角色</DialogTitle>
+        </DialogHeader>
+
+        <ScrollArea className="max-h-[calc(90vh-56px)]">
+          <div className="grid gap-3 p-4">
+            <ShareCharacterCard character={character} combatPower={combatPower} raw={raw} />
+
+            <div className="grid gap-2">
+              <label htmlFor="character-share-url" className="text-sm font-black text-foreground">分享連結</label>
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <input
+                  id="character-share-url"
+                  value={shareUrl}
+                  readOnly
+                  className="min-w-0 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-foreground outline-none focus:ring-3 focus:ring-primary/20"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="rounded-md bg-primary px-4 py-2 text-sm font-black text-primary-foreground transition hover:opacity-90"
+                >
+                  {copyState === "copied" ? "已複製" : copyState === "error" ? "複製失敗" : "複製"}
+                </button>
+              </div>
+              {copyState === "error" ? (
+                <p className="text-sm font-bold text-[var(--danger)]">此瀏覽器不支援自動複製，請手動選取連結。</p>
+              ) : null}
+            </div>
+
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ShareCharacterCard({ character, combatPower, raw }) {
+  const [isImageBroken, setIsImageBroken] = useState(false);
+  const showImage = Boolean(character?.image) && !isImageBroken;
+  const union = normalizeUnionData(raw?.union);
+  const dojangFloor = raw?.dojang?.dojang_best_floor ? `${raw.dojang.dojang_best_floor}F` : "-";
+
+  return (
+    <article className="min-w-0 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-card shadow-[0_18px_50px_var(--shadow-soft)]">
+      <div className="grid gap-3 bg-[var(--surface-soft)] p-3 sm:grid-cols-[112px_1fr]">
+        <div className="flex items-center justify-center rounded-xl bg-[var(--surface-muted)] p-2">
+          {showImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={character?.image} alt={character?.name || "角色"} className="h-24 max-w-full object-contain" onError={() => setIsImageBroken(true)} />
+          ) : (
+            <UserRound className="size-16 text-primary" />
+          )}
+        </div>
+
+        <div className="grid min-w-0 gap-3 lg:grid-cols-[1fr_0.9fr]">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-wide text-primary">Maple Character Card</p>
+            <h3 className="mt-1 break-words text-xl font-black leading-tight text-foreground sm:text-2xl">{character?.name || "等待搜尋"}</h3>
+            <p className="mt-1 break-words text-sm font-bold text-[var(--text-muted)]">
+              Lv. {formatInteger(character?.level) || "-"} · {character?.className || "職業 -"}
+            </p>
+            <div className="mt-3 rounded-lg border border-[var(--border-subtle)] bg-card px-3 py-2">
+              <p className="text-xs font-bold text-[var(--text-muted)]">戰鬥力</p>
+              <p className="break-words text-xl font-black tabular-nums text-primary">{formatDisplayValue("戰鬥力", combatPower)}</p>
+            </div>
+          </div>
+
+          <div className="grid min-w-0 content-start gap-2 rounded-lg border border-[var(--border-subtle)] bg-card p-3 text-sm">
+            <ShareInfoRow label="伺服器" value={character?.world} />
+            <ShareInfoRow label="公會" value={character?.guild} />
+            <ShareInfoRow label="武陵紀錄" value={dojangFloor} />
+            <ShareInfoRow label="聯盟戰地" value={union.level ? `${union.grade || "聯盟"} Lv.${union.level}` : ""} />
+            <ShareInfoRow label="資料日期" value={formatDate(character?.updatedAt)} />
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-subtle)] bg-card px-3 py-2 text-xs font-bold text-[var(--text-muted)]">
+        <span>角色資料查詢名片</span>
+      </div>
+    </article>
+  );
+}
+
+function ShareInfoRow({ label, value }) {
+  return (
+    <div className="grid min-w-0 grid-cols-[72px_1fr] gap-2">
+      <span className="text-[var(--text-muted)]">{label}</span>
+      <span className="min-w-0 break-words text-right font-black text-foreground">{value || "-"}</span>
+    </div>
+  );
+}
+
 function GuildDetailModal({ data, error, isLoading }) {
   if (isLoading) {
     return (
@@ -1167,7 +1320,7 @@ function OptionBlock({ color, options, title }) {
   );
 }
 
-function DarkPanel({ action, children, preset = false, subtitle, title }) {
+function DarkPanel({ action, children, subtitle, title }) {
   return (
     <section className="rounded-xl border border-[var(--border-subtle)] bg-card p-5">
       <div className="flex items-start justify-between gap-3">
@@ -1175,7 +1328,7 @@ function DarkPanel({ action, children, preset = false, subtitle, title }) {
           <h3 className="text-lg font-black text-foreground">{title}</h3>
           {subtitle ? <p className="text-sm text-[var(--text-muted)]">{subtitle}</p> : null}
         </div>
-        {action || (preset ? <PresetSwitch value={1} onChange={() => {}} /> : null)}
+        {action}
       </div>
       <div className="mt-4">{children}</div>
     </section>
@@ -1201,14 +1354,21 @@ function PresetSwitch({ onChange, value }) {
 
 function SummaryCard({ rows, title }) {
   return (
-    <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+    <div className="min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
       <h3 className="mb-2 text-sm font-bold text-foreground">{title}</h3>
-      {rows.map(([label, value], index) => (
-        <div key={`${label}-${index}`} className="flex justify-between gap-3 text-sm text-primary">
-          <span>{label}</span>
-          <span className="truncate font-bold text-foreground">{formatDisplayValue(label, value)}</span>
-        </div>
-      ))}
+      <div className="grid gap-1.5">
+        {rows.map(([label, value], index) => (
+          <div key={`${label}-${index}`} className="flex items-baseline justify-between gap-2 text-sm text-primary">
+            <span className="shrink-0">{label}</span>
+            <span
+              className="min-w-0 flex-1 break-words text-right font-bold tabular-nums text-foreground"
+              title={value !== undefined && value !== null && value !== "" ? String(value) : undefined}
+            >
+              {formatDisplayValue(label, value)}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1409,6 +1569,292 @@ function RawPreview({ compact = false, data, emptyText }) {
   );
 }
 
+function FamiliarSection({ data }) {
+  const familiar = normalizeFamiliar(data);
+
+  return (
+    <div className="grid gap-4">
+      <section>
+        <h4 className="mb-2 text-sm font-black text-foreground">召喚萌獸</h4>
+        {familiar.summoned ? (
+          <div className="grid gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-4 sm:grid-cols-[72px_1fr]">
+            <FamiliarIcon familiar={familiar.summoned} size="large" />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h5 className="break-words text-base font-black text-foreground">{familiar.summoned.name}</h5>
+                {familiar.summoned.grade ? <span className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-xs font-bold text-primary">{familiar.summoned.grade}</span> : null}
+                {familiar.summoned.level ? <span className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-xs font-bold text-[var(--text-muted)]">Lv.{familiar.summoned.level}</span> : null}
+              </div>
+              <EffectLines lines={familiar.summoned.effects} emptyText="尚無召喚萌獸效果資料" />
+            </div>
+          </div>
+        ) : (
+          <EmptyState>尚無召喚萌獸資料</EmptyState>
+        )}
+      </section>
+
+      <section>
+        <h4 className="mb-2 text-sm font-black text-foreground">萌獸群效果</h4>
+        {familiar.groupEffects.length ? (
+          <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-4">
+            <EffectLines lines={familiar.groupEffects} />
+          </div>
+        ) : (
+          <EmptyState>尚無萌獸群效果資料</EmptyState>
+        )}
+      </section>
+
+      <section>
+        <h4 className="mb-2 text-sm font-black text-foreground">萌獸群列表</h4>
+        {familiar.list.length ? (
+          <ScrollableDataList maxHeight="max-h-[32rem]">
+            {familiar.list.map((item, index) => (
+              <button
+                key={`${item.name}-${index}`}
+                type="button"
+                className="grid min-w-0 gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3 text-left sm:grid-cols-[36px_56px_1fr_auto]"
+              >
+                <span className="text-sm font-black text-primary">#{item.no || index + 1}</span>
+                <FamiliarIcon familiar={item} />
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-2">
+                    {item.vip ? <span className="rounded bg-primary px-2 py-0.5 text-xs font-black text-primary-foreground">VIP</span> : null}
+                    <span className="break-words font-black text-foreground">{item.name}</span>
+                    {item.grade ? <span className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-xs font-bold text-primary">{item.grade}</span> : null}
+                    {item.level ? <span className="text-xs font-bold text-[var(--text-muted)]">Lv.{item.level}</span> : null}
+                  </span>
+                  <EffectLines lines={item.effects} compact emptyText="尚無能力效果" />
+                </span>
+                <span className="text-xs font-bold text-[var(--text-muted)]">{item.expireDate ? `~${item.expireDate}` : ""}</span>
+              </button>
+            ))}
+          </ScrollableDataList>
+        ) : (
+          <EmptyState>尚無萌獸群資料</EmptyState>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function FamiliarIcon({ familiar, size = "normal" }) {
+  const [isBroken, setIsBroken] = useState(false);
+  const boxSize = size === "large" ? "size-16" : "size-12";
+
+  return (
+    <span className={`flex ${boxSize} shrink-0 items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-1`}>
+      {familiar.icon && !isBroken ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={familiar.icon} alt={familiar.name} className="max-h-full max-w-full object-contain" onError={() => setIsBroken(true)} />
+      ) : (
+        <Shield className="size-5 text-primary" />
+      )}
+    </span>
+  );
+}
+
+function EffectLines({ compact = false, emptyText = "", lines }) {
+  if (!lines?.length) return emptyText ? <p className="mt-2 text-sm text-[var(--text-muted)]">{emptyText}</p> : null;
+
+  return (
+    <ul className={`${compact ? "mt-1" : "mt-2"} grid gap-1 text-sm leading-6 text-[var(--text-muted)]`}>
+      {lines.map((line, index) => (
+        <li key={`${line}-${index}`} className="min-w-0 break-words">{compact ? "" : "• "}{line}</li>
+      ))}
+    </ul>
+  );
+}
+
+function EmptyState({ children }) {
+  return <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--text-muted)]">{children}</div>;
+}
+
+function UnionTab({ artifactData, championData, raiderData, unionData }) {
+  const [preset, setPreset] = useState(1);
+  const union = normalizeUnionData(unionData);
+  // 記住 blocks 陣列參考，避免 selectedId 這類跟棋盤資料無關的 state 變動也觸發 Pixi 整個重建。
+  const raider = useMemo(() => normalizeUnionRaider(raiderData, preset), [raiderData, preset]);
+  const artifact = normalizeUnionArtifact(artifactData);
+  const champion = normalizeUnionChampion(championData);
+  const [selectedId, setSelectedId] = useState("");
+  const effectiveSelectedId = raider.blocks.some((block) => block.id === selectedId) ? selectedId : raider.blocks[0]?.id || "";
+  const selectedBlock = raider.blocks.find((block) => block.id === effectiveSelectedId) || null;
+
+  return (
+    <div className="grid gap-3">
+      <DarkPanel
+        title="聯盟戰地攻擊隊"
+        subtitle={`${union.grade || "聯盟階級 -"} · Lv. ${formatEmpty(union.level)} · 戰地攻擊力 ${formatDisplayValue("戰地攻擊力", union.raiderPower)}`}
+        action={<UnionPresetSwitch value={preset} onChange={(value) => {
+          setPreset(value);
+          setSelectedId("");
+        }} />}
+      >
+        <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">
+          <div className="min-w-0">
+            <UnionRaiderPixiBoard blocks={raider.blocks} selectedId={effectiveSelectedId} onSelect={setSelectedId} />
+            <p className="mt-2 min-h-5 text-center text-sm font-bold text-foreground">
+              {selectedBlock ? (
+                <>
+                  已選擇：{selectedBlock.name}
+                  <span className="text-[var(--text-muted)]"> Lv.{formatEmpty(selectedBlock.level)}{selectedBlock.className ? ` · ${selectedBlock.className}` : ""}</span>
+                </>
+              ) : null}
+            </p>
+          </div>
+          <UnionRaiderEffects occupied={raider.occupiedEffects} member={raider.memberEffects} />
+        </div>
+      </DarkPanel>
+
+      <DarkPanel title="攻擊隊角色列表" subtitle={raider.blocks.length ? `共 ${raider.blocks.length} 位角色` : ""}>
+        <UnionCharacterList blocks={raider.blocks} selectedId={effectiveSelectedId} onSelect={setSelectedId} />
+      </DarkPanel>
+
+      <UnionArtifactSection artifact={artifact} />
+      <UnionChampionSection champion={champion} />
+    </div>
+  );
+}
+
+function UnionPresetSwitch({ onChange, value }) {
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map((item) => (
+        <button
+          key={item}
+          type="button"
+          onClick={() => onChange(item)}
+          className={`size-8 rounded-md text-sm font-black ${value === item ? "bg-primary text-primary-foreground" : "bg-[var(--surface-muted)] text-[var(--text-muted)] hover:bg-[var(--surface-soft)]"}`}
+        >
+          {item}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function UnionCharacterList({ blocks, onSelect, selectedId }) {
+  const groups = groupUnionCharacters(blocks);
+  if (!blocks.length) return <EmptyState>尚無攻擊隊角色資料</EmptyState>;
+
+  return (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
+      {groups.map(([group, items]) => (
+        <div key={group} className="min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3">
+          <h4 className="mb-2 break-words text-sm font-black text-foreground">{group}（{items.length}）</h4>
+          <ScrollArea className="h-[300px] min-w-0">
+            <div className="grid gap-1.5 pr-2">
+              {items.map((item, index) => {
+                const isSelected = selectedId === item.id;
+                return (
+                  <button
+                    key={`${item.id}-${index}`}
+                    type="button"
+                    onClick={() => onSelect(item.id)}
+                    title={`${item.name}${item.className ? ` · ${item.className}` : ""}`}
+                    className={`grid min-w-0 gap-0.5 rounded-md px-2.5 py-2 text-left text-sm transition ${isSelected ? "bg-primary text-primary-foreground" : "bg-[var(--surface-muted)] text-foreground hover:bg-card"}`}
+                  >
+                    <span className="min-w-0 break-words font-bold leading-snug">
+                      Lv.{formatEmpty(item.level)} {item.name}
+                    </span>
+                    {item.className ? (
+                      <span className={`min-w-0 break-words text-xs leading-snug ${isSelected ? "text-primary-foreground/80" : "text-[var(--text-muted)]"}`}>
+                        {item.className}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function UnionRaiderEffects({ member, occupied }) {
+  return (
+    <div className="grid min-w-0 content-start gap-4">
+      <section>
+        <h4 className="mb-2 text-sm font-black text-foreground">攻擊隊佔領效果</h4>
+        <UnionEffectPanel lines={occupied} emptyText="無佔領效果" />
+      </section>
+      <section>
+        <h4 className="mb-2 text-sm font-black text-foreground">攻擊隊員效果</h4>
+        <UnionEffectPanel lines={member} emptyText="無攻擊隊員效果" />
+      </section>
+    </div>
+  );
+}
+
+function UnionEffectPanel({ emptyText, height = "h-[240px]", lines }) {
+  if (!lines?.length) return <EmptyState>{emptyText}</EmptyState>;
+
+  return (
+    <ScrollArea className={`${height} min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)]`}>
+      <div className="p-3">
+        <EffectLines lines={lines} />
+      </div>
+    </ScrollArea>
+  );
+}
+
+function UnionArtifactSection({ artifact }) {
+  return (
+    <DarkPanel title="聯盟神器" subtitle={artifact.level ? `神器效果 Lv. ${artifact.level}` : ""}>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="min-w-0">
+          <h4 className="mb-2 text-sm font-black text-foreground">神器水晶</h4>
+          {artifact.crystals.length ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {artifact.crystals.map((item, index) => (
+                <div key={`${item.name}-${index}`} className="min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3 text-center">
+                  <Gem className="mx-auto mb-2 size-8 text-primary" />
+                  <p className="break-words text-sm font-black text-foreground">{item.name}</p>
+                  <p className="text-xs font-bold text-[var(--text-muted)]">Lv.{formatEmpty(item.level)}</p>
+                </div>
+              ))}
+            </div>
+          ) : <EmptyState>尚無聯盟神器水晶資料</EmptyState>}
+        </section>
+        <section className="min-w-0">
+          <h4 className="mb-2 text-sm font-black text-foreground">神器效果</h4>
+          <UnionEffectPanel lines={artifact.effects} emptyText="尚無聯盟神器效果資料" />
+        </section>
+      </div>
+    </DarkPanel>
+  );
+}
+
+function UnionChampionSection({ champion }) {
+  return (
+    <DarkPanel title="聯盟冠軍">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="min-w-0">
+          <h4 className="mb-2 text-sm font-black text-foreground">冠軍角色</h4>
+          {champion.characters.length ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {champion.characters.map((item, index) => (
+                <div key={`${item.name}-${index}`} className="min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3 text-center">
+                  <Trophy className="mx-auto mb-2 size-8 text-primary" />
+                  <p className="break-words text-sm font-black text-foreground">{item.name}</p>
+                  <p className="break-words text-xs text-[var(--text-muted)]">Lv.{formatEmpty(item.level)}{item.className ? ` · ${item.className}` : ""}</p>
+                  {item.grade ? <p className="mt-1 text-xs font-bold text-primary">{item.grade}</p> : null}
+                </div>
+              ))}
+            </div>
+          ) : <EmptyState>尚無聯盟冠軍角色資料</EmptyState>}
+        </section>
+        <section className="min-w-0">
+          <h4 className="mb-2 text-sm font-black text-foreground">冠軍徽章效果</h4>
+          <UnionEffectPanel lines={champion.effects} emptyText="尚無聯盟冠軍效果資料" />
+        </section>
+      </div>
+    </DarkPanel>
+  );
+}
+
 function EndpointStatus({ status }) {
   if (!status) return <p className="text-sm text-[var(--text-muted)]">尚無 API 狀態資料</p>;
 
@@ -1514,14 +1960,16 @@ function normalizeGenericIcons(data, preferredKeys = [], fallbackName = "項目"
     .filter((item) => item.name || item.icon);
 }
 
-function normalizeAbility(data) {
-  const rows = data?.ability_info || data?.ability_preset_1?.ability_info || [];
+function normalizeAbility(data, preset = 1) {
+  const presetRows = data?.[`ability_preset_${preset}`]?.ability_info;
+  const rows = Array.isArray(presetRows) && presetRows.length ? presetRows : data?.ability_info || [];
   if (!Array.isArray(rows)) return [];
   return rows.map((item) => item.ability_value || item.description || item.ability_no || item.name).filter(Boolean);
 }
 
-function normalizeHyperStats(data) {
-  const rows = data?.hyper_stat_preset_1 || data?.hyper_stat || [];
+function normalizeHyperStats(data, preset = 1) {
+  const presetRows = data?.[`hyper_stat_preset_${preset}`];
+  const rows = Array.isArray(presetRows) && presetRows.length ? presetRows : data?.hyper_stat || [];
   if (!Array.isArray(rows)) return [];
   return rows.map((item) => `${item.stat_type || item.name || "屬性"} Lv.${item.stat_level || "-"} ${item.stat_increase || ""}`).filter(Boolean);
 }
@@ -1537,6 +1985,191 @@ function normalizeSkills(data) {
       raw: item,
     }))
     .filter((item) => item.name || item.icon);
+}
+
+function normalizeFamiliar(data) {
+  const summonedRaw = firstObject(data?.familiar_equipped, data?.equipped_familiar, data?.summoned_familiar, data?.summoned, data?.familiar_info);
+  const listRows = getFirstArray(data, ["familiar_list", "familiar", "familiar_group", "familiars"]);
+  const groupEffects = uniqueLines([
+    ...normalizeTextLines(data?.familiar_effect),
+    ...normalizeTextLines(data?.familiar_group_effect),
+    ...normalizeTextLines(data?.familiar_option),
+    ...normalizeTextLines(data?.summary),
+  ]);
+  const list = listRows.map((item, index) => normalizeFamiliarItem(item, index + 1)).filter((item) => item.name || item.icon || item.effects.length);
+  const summoned = summonedRaw ? normalizeFamiliarItem(summonedRaw, summonedRaw.familiar_no || 1) : list.find((item) => item.isEquipped) || null;
+
+  return { summoned, groupEffects, list };
+}
+
+function normalizeFamiliarItem(item, no) {
+  const effects = uniqueLines([
+    ...normalizeTextLines(item?.familiar_option),
+    ...normalizeTextLines(item?.familiar_effect),
+    ...normalizeTextLines(item?.familiar_potential),
+    ...normalizeTextLines(item?.option),
+    ...normalizeTextLines(item?.effect),
+    ...normalizeTextLines(item?.potential),
+  ]);
+
+  return {
+    no: item?.familiar_no || item?.no || no,
+    name: item?.familiar_name || item?.name || item?.item_name || "萌獸",
+    icon: item?.familiar_icon || item?.icon || item?.item_icon || "",
+    grade: item?.familiar_grade || item?.grade || item?.rank || "",
+    level: item?.familiar_level || item?.level || "",
+    vip: Boolean(item?.vip || item?.familiar_vip || item?.is_vip),
+    expireDate: formatFamiliarDate(item?.familiar_date_expire || item?.familiar_expire_date || item?.date_expire || item?.expire_date),
+    effects,
+    isEquipped: Boolean(item?.familiar_equipped || item?.is_equipped || item?.equipped),
+  };
+}
+
+function normalizeUnionData(data) {
+  return {
+    level: data?.union_level || data?.level || "",
+    grade: data?.union_grade || data?.grade || "",
+    raiderPower: data?.union_raider_power || data?.raider_power || data?.union_power || "",
+  };
+}
+
+function normalizeUnionRaider(data, preset) {
+  const presetData = getUnionPresetData(data, preset);
+  const blocks = getFirstArray(presetData, ["union_block", "block", "blocks", "union_blocks"]).map((item, index) => normalizeUnionBlock(item, index));
+  const occupiedEffects = uniqueLines([
+    ...normalizeUnionEffectLines(presetData?.union_occupied_stat),
+    ...normalizeUnionEffectLines(presetData?.union_inner_stat),
+    ...normalizeUnionEffectLines(data?.union_occupied_stat),
+    ...normalizeUnionEffectLines(data?.union_inner_stat),
+  ]);
+  const memberEffects = uniqueLines([
+    ...normalizeUnionEffectLines(presetData?.union_raider_stat),
+    ...normalizeUnionEffectLines(data?.union_raider_stat),
+  ]);
+
+  return { blocks, occupiedEffects, memberEffects };
+}
+
+function normalizeUnionBlock(item, index) {
+  const positions = getBlockPositions(item, index);
+  const name = item?.block_character_name || item?.character_name || item?.name || item?.block_type || `角色 ${index + 1}`;
+
+  return {
+    // 附加原始陣列 index，避免同職業、同等級（甚至同名補位角色）造成 id 撞號。
+    id: `${name}-${item?.block_level || item?.character_level || index}-${index}`,
+    name,
+    className: item?.block_class || item?.character_class || item?.class_name || "",
+    level: item?.block_level || item?.character_level || item?.level || "",
+    group: item?.block_class_group || item?.class_group || item?.block_type || item?.job_category || "其他",
+    positions,
+    raw: item,
+  };
+}
+
+function getBlockPositions(item, index) {
+  const rows = Array.isArray(item?.block_position) ? item.block_position : Array.isArray(item?.position) ? item.position : [];
+  const positions = rows
+    .map((pos) => {
+      // Nexon 部分版本的 block_position 是 [x, y] 座標陣列（tuple），不是 {x, y} 物件；兩種格式都要能解析。
+      if (Array.isArray(pos)) return { x: Number(pos[0]), y: Number(pos[1]) };
+      return { x: Number(pos?.x ?? pos?.position_x ?? pos?.block_position_x), y: Number(pos?.y ?? pos?.position_y ?? pos?.block_position_y) };
+    })
+    .filter((pos) => Number.isFinite(pos.x) && Number.isFinite(pos.y));
+
+  if (positions.length) return positions;
+
+  return [{ x: index % 10, y: Math.floor(index / 10) }];
+}
+
+function normalizeUnionArtifact(data) {
+  const crystals = getFirstArray(data, ["union_artifact_crystal", "artifact_crystal", "crystals"]).map((item, index) => ({
+    name: item.name || item.crystal_name || item.artifact_crystal_name || `水晶 ${index + 1}`,
+    level: item.level || item.crystal_level || item.artifact_crystal_level || "",
+  }));
+  const effects = uniqueLines([
+    ...normalizeUnionEffectLines(data?.union_artifact_effect),
+    ...normalizeUnionEffectLines(data?.artifact_effect),
+    ...normalizeUnionEffectLines(data?.effects),
+  ]);
+
+  return {
+    level: data?.union_artifact_level || data?.artifact_level || "",
+    crystals,
+    effects,
+  };
+}
+
+function normalizeUnionChampion(data) {
+  const characters = getFirstArray(data, ["union_champion", "champion", "champions", "champion_character"]).map((item, index) => ({
+    name: item.character_name || item.champion_name || item.name || `冠軍 ${index + 1}`,
+    level: item.character_level || item.level || "",
+    className: item.character_class || item.class_name || "",
+    grade: item.champion_grade || item.grade || item.rank || "",
+  }));
+  const effects = uniqueLines([
+    ...normalizeUnionEffectLines(data?.champion_badge_total_info),
+    ...normalizeUnionEffectLines(data?.union_champion_effect),
+    ...normalizeUnionEffectLines(data?.champion_effect),
+    ...normalizeUnionEffectLines(data?.effects),
+  ]);
+
+  return { characters, effects };
+}
+
+function getUnionPresetData(data, preset) {
+  if (!data || typeof data !== "object") return {};
+  return data[`union_raider_preset_${preset}`] || data[`union_raider_preset${preset}`] || data[`preset_${preset}`] || data;
+}
+
+function groupUnionCharacters(blocks) {
+  const map = new Map();
+  blocks.forEach((block) => {
+    const key = block.group || "其他";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(block);
+  });
+  return Array.from(map.entries());
+}
+
+function normalizeTextLines(value) {
+  if (value === undefined || value === null || value === "") return [];
+  if (Array.isArray(value)) return value.flatMap((item) => normalizeTextLines(item));
+  if (typeof value === "object") {
+    return Object.entries(value)
+      .filter(([, item]) => item !== undefined && item !== null && item !== "")
+      .map(([key, item]) => typeof item === "object" ? formatReadableValue(item) : `${key}: ${item}`);
+  }
+  return [String(value)];
+}
+
+// 聯盟戰地相關效果（佔領效果／隊員效果／神器效果／冠軍效果）專用：
+// Nexon 回傳常是 [{ stat_field_id, stat_field_effect }, ...] 這種帶編號欄位的陣列，
+// 只取真正的敘述文字（stat_field_effect 等），不要把 id 欄位也印出來。
+function normalizeUnionEffectLines(value) {
+  if (value === undefined || value === null || value === "") return [];
+  if (Array.isArray(value)) return value.flatMap((item) => normalizeUnionEffectLines(item));
+  if (typeof value === "object") {
+    const text = value.stat_field_effect ?? value.union_block_stat ?? value.stat_detail ?? value.description ?? value.effect ?? value.value ?? "";
+    return text ? [String(text)] : [];
+  }
+  return [String(value)];
+}
+
+function firstObject(...values) {
+  for (const value of values) {
+    if (Array.isArray(value) && value[0] && typeof value[0] === "object") return value[0];
+    if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  }
+  return null;
+}
+
+function uniqueLines(lines) {
+  return Array.from(new Set(lines.map((line) => String(line).trim()).filter(Boolean)));
+}
+
+function formatFamiliarDate(value) {
+  if (!value) return "";
+  return String(value).slice(0, 10).replaceAll("-", "/");
 }
 
 function getSetEffectLines(item) {
@@ -1638,7 +2271,8 @@ function formatDisplayValue(label, value) {
   if (value === undefined || value === null || value === "") return "-";
   if (typeof value === "boolean") return value ? "是" : "否";
   const text = String(value);
-  if (String(label).includes("戰鬥力")) return formatCombatPower(text);
+  if (String(label) === "OCID") return text.length > 10 ? `${text.slice(0, 10)}...` : text;
+  if (String(label).includes("戰鬥力") || String(label).includes("屬性攻擊力")) return formatCombatPower(text);
   if (text.includes("%")) return text;
   if (shouldUsePercent(label, text)) return `${text}%`;
   if (/^-?\d+(\.\d+)?$/.test(text)) return formatInteger(text);
@@ -1660,6 +2294,35 @@ function formatSignedOption(value, key) {
 function formatDate(value) {
   if (!value) return "-";
   return String(value).slice(0, 10);
+}
+
+function buildCharacterShareUrl(character) {
+  if (!character || typeof window === "undefined") return "";
+
+  const params = [`name=${encodeURIComponent(character.name || "")}`];
+  if (character.world) params.push(`world=${encodeURIComponent(character.world)}`);
+
+  return `${window.location.origin}/character?${params.join("&")}`;
+}
+
+async function copyToClipboard(text) {
+  if (navigator?.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+
+  if (!copied) throw new Error("Clipboard is not available.");
 }
 
 function getModalTitle(data) {
@@ -1698,4 +2361,3 @@ function normalizeGuildSkills(rows) {
     }))
     .filter((item) => item.name);
 }
-

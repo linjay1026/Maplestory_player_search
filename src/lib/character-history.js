@@ -26,15 +26,22 @@ export async function saveCharacterHistory(character) {
     guild: character.guild,
     combatPower: character.combatPower || "",
     updatedAt: character.updatedAt || "",
+    dataDate: character.updatedAt ? String(character.updatedAt).slice(0, 10) : "",
     searchedAt: now,
   };
+  // 同一角色名稱只保留一筆，不論查詢日期是否不同；重新查詢會覆蓋成最新一筆並排到最前面。
+  const normalizedName = normalizeCharacterName(record.name);
   const nextHistory = [
     record,
-    ...history.filter((item) => item.ocid !== record.ocid && item.name !== record.name),
+    ...history.filter((item) => normalizeCharacterName(item.name) !== normalizedName),
   ].slice(0, 100);
 
   await mkdir(path.dirname(historyPath), { recursive: true });
   await writeFile(historyPath, `${JSON.stringify(nextHistory, null, 2)}\n`, "utf8");
 
   return nextHistory;
+}
+
+function normalizeCharacterName(name) {
+  return String(name || "").trim().toLowerCase();
 }
