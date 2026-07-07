@@ -6,6 +6,7 @@ import { CharacterProfile, CharacterProfileSkeleton } from "@/components/charact
 import { SearchHistoryDialog, SearchPanel } from "@/components/search-panel";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getDefaultQueryDate, isValidQueryDate } from "@/lib/date";
+import { readSearchHistory, saveSearchHistory } from "@/lib/search-history";
 
 export function CharacterExplorer() {
   const [name, setName] = useState("");
@@ -14,11 +15,12 @@ export function CharacterExplorer() {
   const [characters, setCharacters] = useState([]);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isListLoading, setIsListLoading] = useState(true);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   useEffect(() => {
-    loadCharacters();
+    // localStorage 只能在瀏覽器讀取，掛載後再同步，避免 SSR 輸出跟 client 端不一致。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCharacters(readSearchHistory());
   }, []);
 
   useEffect(() => {
@@ -27,20 +29,6 @@ export function CharacterExplorer() {
     // Run once on first client render so /character?name=... opens the profile.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function loadCharacters() {
-    setIsListLoading(true);
-
-    try {
-      const response = await fetch("/api/characters");
-      const data = await response.json();
-      setCharacters(data.characters || []);
-    } catch {
-      setCharacters([]);
-    } finally {
-      setIsListLoading(false);
-    }
-  }
 
   async function searchCharacter(characterName = name, dateOverride) {
     const query = characterName.trim();
@@ -72,7 +60,7 @@ export function CharacterExplorer() {
       }
 
       setCharacter(data);
-      await loadCharacters();
+      setCharacters(saveSearchHistory(data));
     } catch (err) {
       setError(err instanceof Error ? err.message : "角色查詢失敗。");
     } finally {
@@ -120,9 +108,8 @@ export function CharacterExplorer() {
 
       <SearchHistoryDialog
         characters={characters}
-        isListLoading={isListLoading}
         onOpenChange={setIsHistoryOpen}
-        onRefresh={loadCharacters}
+        onRefresh={() => setCharacters(readSearchHistory())}
         onSelect={searchCharacter}
         open={isHistoryOpen}
       />

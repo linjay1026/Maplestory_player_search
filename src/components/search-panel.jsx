@@ -75,7 +75,7 @@ export function SearchPanel({
   );
 }
 
-export function SearchHistoryDialog({ characters, isListLoading, onOpenChange, onRefresh, onSelect, open }) {
+export function SearchHistoryDialog({ characters, onOpenChange, onRefresh, onSelect, open }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] w-[calc(100vw-2rem)] max-w-[560px] overflow-hidden border-[var(--border-subtle)] bg-popover p-0 text-popover-foreground shadow-2xl sm:max-w-[560px]">
@@ -84,35 +84,34 @@ export function SearchHistoryDialog({ characters, isListLoading, onOpenChange, o
         </DialogHeader>
 
         <div className="flex items-center justify-between gap-3 border-b border-[var(--border-subtle)] px-4 py-3">
-          <p className="text-sm text-[var(--text-muted)]">這裡只會列出使用者查詢成功後留下的紀錄。</p>
-          <Button type="button" variant="outline" size="icon-sm" onClick={onRefresh} disabled={isListLoading}>
-            {isListLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+          <p className="text-sm text-[var(--text-muted)]">這裡只會列出這台裝置查詢成功後留下的紀錄（儲存在瀏覽器本機）。</p>
+          <Button type="button" variant="outline" size="icon-sm" onClick={onRefresh}>
+            <RefreshCw className="size-4" />
           </Button>
         </div>
 
         <ScrollArea className="max-h-[60vh]">
           <div className="grid gap-2 p-4">
-            {isListLoading ? (
-              <div className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3 text-sm text-[var(--text-muted)]">載入紀錄中...</div>
-            ) : characters.length ? (
-              characters.map((item) => (
+            {characters.length ? (
+              characters.map((item, index) => (
                 <button
-                  key={item.ocid || `${item.world}-${item.name}`}
+                  key={`${item.characterName}-${item.worldName}-${index}`}
                   type="button"
-                  onClick={() => onSelect(item.name, item.dataDate)}
+                  onClick={() => onSelect(item.characterName, item.date)}
                   className="grid grid-cols-[42px_1fr_auto] items-center gap-3 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-soft)] p-3 text-left transition hover:border-primary"
                 >
-                  <CharacterAvatar image={item.image} name={item.name} />
+                  <CharacterAvatar image={item.characterImage} name={item.characterName} />
                   <span className="min-w-0">
-                    <span className="block truncate font-bold text-foreground">{item.name}</span>
+                    <span className="block truncate font-bold text-foreground">{item.characterName}</span>
                     <span className="block truncate text-sm text-[var(--text-muted)]">
-                      {item.world || "未知伺服器"} · {item.className || "未知職業"} · Lv.{item.level || "-"}
+                      {item.worldName || "未知伺服器"} · {item.job || "未知職業"} · Lv.{item.level || "-"}
+                      {item.guild ? ` · ${item.guild}` : ""}
                     </span>
                   </span>
                   <span className="text-right text-xs text-[var(--text-muted)]">
                     <Clock3 className="ml-auto size-4" />
                     {formatDate(item.searchedAt)}
-                    {item.dataDate ? <span className="block">資料日期 {String(item.dataDate).slice(0, 10)}</span> : null}
+                    {item.date ? <span className="block">資料日期 {item.date}</span> : null}
                   </span>
                 </button>
               ))

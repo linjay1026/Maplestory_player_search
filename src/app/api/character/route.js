@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { saveCharacterHistory } from "@/lib/character-history";
 import { getDefaultQueryDate } from "@/lib/date";
 import { getNexonBaseUrl, nexonFetch, nexonFetchWithRetry, toApiError, wait } from "@/lib/nexon";
 
@@ -82,8 +81,6 @@ export async function GET(request) {
         ...details,
       },
     };
-
-    await saveCharacterHistory(character);
 
     return NextResponse.json(character);
   } catch (error) {
