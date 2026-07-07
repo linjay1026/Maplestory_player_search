@@ -1676,6 +1676,14 @@ function UnionTab({ artifactData, championData, raiderData, unionData }) {
   const raider = useMemo(() => normalizeUnionRaider(raiderData, preset), [raiderData, preset]);
   const artifact = normalizeUnionArtifact(artifactData);
   const champion = normalizeUnionChampion(championData);
+
+  if (process.env.NODE_ENV !== "production") {
+    // 暫時性除錯用：如果神器效果／冠軍徽章效果還是顯示不出來，
+    // 打開瀏覽器 console 看這兩包原始資料的實際欄位名稱。
+    console.log("[union debug] raw.unionArtifact =", artifactData);
+    console.log("[union debug] raw.unionChampion =", championData);
+  }
+
   const [selectedId, setSelectedId] = useState("");
   const effectiveSelectedId = raider.blocks.some((block) => block.id === selectedId) ? selectedId : raider.blocks[0]?.id || "";
   const selectedBlock = raider.blocks.find((block) => block.id === effectiveSelectedId) || null;
@@ -2082,15 +2090,55 @@ function getBlockPositions(item, index) {
 }
 
 function normalizeUnionArtifact(data) {
-  const crystals = getFirstArray(data, ["union_artifact_crystal", "artifact_crystal", "crystals"]).map((item, index) => ({
+  const crystalRows = getFirstArray(data, [
+    "union_artifact_crystal",
+    "union_artifact_crystal_info",
+    "artifact_crystal",
+    "artifact_crystal_info",
+    "crystal_info",
+    "crystals",
+  ]);
+  const crystals = crystalRows.map((item, index) => ({
     name: item.name || item.crystal_name || item.artifact_crystal_name || `水晶 ${index + 1}`,
     level: item.level || item.crystal_level || item.artifact_crystal_level || "",
   }));
-  const effects = uniqueLines([
-    ...normalizeUnionEffectLines(data?.union_artifact_effect),
-    ...normalizeUnionEffectLines(data?.artifact_effect),
-    ...normalizeUnionEffectLines(data?.effects),
-  ]);
+
+  const directEffectSource = [
+    "union_artifact_effect",
+    "union_artifact_effect_info",
+    "artifact_effect",
+    "artifact_effect_info",
+    "effect_info",
+    "artifact_option",
+    "artifact_option_info",
+    "effects",
+  ]
+    .map((key) => data?.[key])
+    .find((value) => (Array.isArray(value) && value.length) || (typeof value === "string" && value));
+
+  let effects = uniqueLines(normalizeUnionEffectLines(directEffectSource));
+
+  // 找不到獨立的神器效果欄位時，退而求其次：從每顆水晶自帶的屬性選項組出效果文字
+  // （部分版本的 Nexon API 是把水晶效果直接放在水晶物件裡，而不是另外一個陣列）。
+  if (!effects.length) {
+    effects = uniqueLines(
+      crystalRows.flatMap((item) => {
+        const options = [
+          item.crystal_option_name_1,
+          item.crystal_option_name_2,
+          item.crystal_option_name_3,
+          item.option_name_1,
+          item.option_name_2,
+          item.option_name_3,
+        ].filter(Boolean);
+
+        if (!options.length) return [];
+
+        const label = item.name || item.crystal_name || item.artifact_crystal_name || "水晶";
+        return [`${label}：${options.join("、")}`];
+      }),
+    );
+  }
 
   return {
     level: data?.union_artifact_level || data?.artifact_level || "",
@@ -2100,18 +2148,38 @@ function normalizeUnionArtifact(data) {
 }
 
 function normalizeUnionChampion(data) {
-  const characters = getFirstArray(data, ["union_champion", "champion", "champions", "champion_character"]).map((item, index) => ({
+  const characters = getFirstArray(data, [
+    "union_champion",
+    "union_champion_info",
+    "champion",
+    "champion_info",
+    "champion_character",
+    "champion_character_info",
+    "champions",
+  ]).map((item, index) => ({
     name: item.character_name || item.champion_name || item.name || `冠軍 ${index + 1}`,
     level: item.character_level || item.level || "",
     className: item.character_class || item.class_name || "",
     grade: item.champion_grade || item.grade || item.rank || "",
   }));
-  const effects = uniqueLines([
-    ...normalizeUnionEffectLines(data?.champion_badge_total_info),
-    ...normalizeUnionEffectLines(data?.union_champion_effect),
-    ...normalizeUnionEffectLines(data?.champion_effect),
-    ...normalizeUnionEffectLines(data?.effects),
-  ]);
+
+  const directEffectSource = [
+    "champion_badge_total_info",
+    "union_champion_effect",
+    "union_champion_effect_info",
+    "champion_effect",
+    "champion_effect_info",
+    "champion_badge_effect",
+    "champion_badge_effect_info",
+    "badge_effect",
+    "badge_effect_info",
+    "effect_info",
+    "effects",
+  ]
+    .map((key) => data?.[key])
+    .find((value) => (Array.isArray(value) && value.length) || (typeof value === "string" && value));
+
+  const effects = uniqueLines(normalizeUnionEffectLines(directEffectSource));
 
   return { characters, effects };
 }
@@ -2149,8 +2217,25 @@ function normalizeUnionEffectLines(value) {
   if (value === undefined || value === null || value === "") return [];
   if (Array.isArray(value)) return value.flatMap((item) => normalizeUnionEffectLines(item));
   if (typeof value === "object") {
-    const text = value.stat_field_effect ?? value.union_block_stat ?? value.stat_detail ?? value.description ?? value.effect ?? value.value ?? "";
-    return text ? [String(text)] : [];
+    const known =
+      value.stat_field_effect ??
+      value.union_block_stat ??
+      value.stat_detail ??
+      value.description ??
+      value.effect ??
+      value.option ??
+      value.name ??
+      value.value ??
+      "";
+    if (known) return [String(known)];
+
+    // 找不到已知欄位名稱時，退而求其次挑第一個「像敘述文字」的字串值
+    // （排除 xxx_id 這類欄位、以及純數字/百分比），避免整包資料被丟掉不顯示，
+    // 但也避免把 stat_field_id 這種原始欄位名稱或編號直接印出來。
+    const fallback = Object.entries(value).find(
+      ([key, item]) => typeof item === "string" && item && !/(^|_)id$/i.test(key) && !/^-?\d+(\.\d+)?%?$/.test(item),
+    );
+    return fallback ? [String(fallback[1])] : [];
   }
   return [String(value)];
 }
