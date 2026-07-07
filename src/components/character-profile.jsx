@@ -113,14 +113,28 @@ const rawFieldLabels = {
 };
 const EQUIPMENT_VIEW_STORAGE_KEY = "equipment-view-mode";
 const equipmentViewModes = ["grid", "list"];
-// 潛能等級配色：傳說=綠、罕見=金黃、稀有=紫、特殊=淺藍。
-// 顏色值統一定義在 globals.css 的 --potential-* 變數（淺色/深色各有一套）。
+// 潛能/內在潛能等級配色：傳說=綠、罕見=金黃、稀有=紫、特殊=淺藍（使用者規定的配色，非楓之谷原本配色）。
+// 顏色值統一定義在 globals.css 的 --potential-* 變數（淺色/深色各有一套）；同時支援中文與英文別名。
 const potentialTiers = [
-  { match: "傳說", label: "傳說", text: "text-[var(--potential-legendary)]", chip: "bg-[var(--potential-legendary-soft)] text-[var(--potential-legendary)]" },
-  { match: "罕見", label: "罕見", text: "text-[var(--potential-unique)]", chip: "bg-[var(--potential-unique-soft)] text-[var(--potential-unique)]" },
-  { match: "稀有", label: "稀有", text: "text-[var(--potential-epic)]", chip: "bg-[var(--potential-epic-soft)] text-[var(--potential-epic)]" },
-  { match: "特殊", label: "特殊", text: "text-[var(--potential-rare)]", chip: "bg-[var(--potential-rare-soft)] text-[var(--potential-rare)]" },
+  { match: ["傳說", "legendary"], label: "傳說", text: "text-[var(--potential-legendary)]", chip: "bg-[var(--potential-legendary-soft)] text-[var(--potential-legendary)]" },
+  { match: ["罕見", "unique"], label: "罕見", text: "text-[var(--potential-unique)]", chip: "bg-[var(--potential-unique-soft)] text-[var(--potential-unique)]" },
+  { match: ["稀有", "epic"], label: "稀有", text: "text-[var(--potential-epic)]", chip: "bg-[var(--potential-epic-soft)] text-[var(--potential-epic)]" },
+  { match: ["特殊", "rare", "special"], label: "特殊", text: "text-[var(--potential-rare)]", chip: "bg-[var(--potential-rare-soft)] text-[var(--potential-rare)]" },
 ];
+// 角色基本資料常見欄位的中文標籤（性向資訊、武陵道場最高紀錄等 KeyValue 區塊共用）。
+const FIELD_LABELS = {
+  character_class: "職業",
+  world_name: "伺服器",
+  date_dojang_record: "紀錄日期",
+  dojang_best_floor: "最高樓層",
+  dojang_best_time: "最佳時間",
+  charisma_level: "領導力",
+  sensibility_level: "感性",
+  insight_level: "洞察力",
+  willingness_level: "意志",
+  handicraft_level: "手藝",
+  charm_level: "魅力",
+};
 const highlightedStatKeys = new Set(["attack_power", "magic_power", "boss_damage", "ignore_monster_armor", "all_stat", "damage"]);
 // 裝備欄固定部位排位（仿遊戲內裝備視窗，5 欄）；null 代表該格留白。
 const EQUIPMENT_SLOT_LAYOUT = [
@@ -335,10 +349,10 @@ export function CharacterProfile({ character }) {
               subtitle={raw.ability?.remain_fame ? `剩餘名聲值：${formatInteger(raw.ability.remain_fame)}` : ""}
               action={<PresetSwitch value={abilityPreset} onChange={setAbilityPreset} />}
             >
-              <TextList items={normalizeAbility(raw.ability, abilityPreset)} emptyText="尚無能力資料" tone="highlight" />
+              <AbilityList data={normalizeAbility(raw.ability, abilityPreset)} />
             </DarkPanel>
             <DarkPanel title="性向資訊">
-              <StatGrid rows={objectToRows(raw.propensity, ["date"])} />
+              <StatGrid rows={objectToRows(raw.propensity, ["date"]).map(([key, value]) => [getFieldLabel(key), formatFieldValue(key, value)])} />
             </DarkPanel>
           </div>
         </div>
@@ -425,13 +439,10 @@ export function CharacterProfile({ character }) {
           <SetEffectList data={raw.setEffect} />
         </DarkPanel>
         <DarkPanel title="武陵道場最高紀錄">
-          <StatGrid rows={objectToRows(raw.dojang, ["date"])} />
+          <StatGrid rows={objectToRows(raw.dojang, ["date"]).map(([key, value]) => [getFieldLabel(key), formatFieldValue(key, value)])} />
         </DarkPanel>
         <DarkPanel title="萌獸資訊">
           <FamiliarSection data={raw.familiar} />
-        </DarkPanel>
-        <DarkPanel title="API 取得狀態">
-          <EndpointStatus status={raw._detailStatus} />
         </DarkPanel>
       </div>
     );
@@ -670,8 +681,8 @@ function StarRow({ starforce }) {
 
 function getPotentialTier(grade) {
   if (!grade) return null;
-  const text = String(grade);
-  return potentialTiers.find((tier) => text.includes(tier.match)) || null;
+  const text = String(grade).toLowerCase();
+  return potentialTiers.find((tier) => tier.match.some((keyword) => text.includes(keyword.toLowerCase()))) || null;
 }
 
 function EquipmentSlotImage({ fallback, icon, name }) {
@@ -1414,6 +1425,24 @@ function TextList({ emptyText, items, tone = "default" }) {
   );
 }
 
+function AbilityList({ data, emptyText = "尚無能力資料" }) {
+  const { grade, items } = data;
+  if (!items.length) return <p className="text-sm text-[var(--text-muted)]">{emptyText}</p>;
+  const tier = getPotentialTier(grade);
+  const itemClassName = tier ? tier.chip : "bg-primary text-primary-foreground";
+
+  return (
+    <div className="grid gap-2">
+      {tier ? <span className={`w-fit rounded-md px-2 py-1 text-xs font-black ${tier.chip}`}>{tier.label}</span> : null}
+      {items.map((item, index) => (
+        <div key={`${item}-${index}`} className={`rounded-md px-3 py-2 text-sm font-bold ${itemClassName}`}>
+          {item}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ScrollableDataList({ children, height = "h-[420px]" }) {
   return (
     <ScrollArea className={`${height} min-w-0 rounded-md`}>
@@ -1863,20 +1892,6 @@ function UnionChampionSection({ champion }) {
   );
 }
 
-function EndpointStatus({ status }) {
-  if (!status) return <p className="text-sm text-[var(--text-muted)]">尚無 API 狀態資料</p>;
-
-  return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      {Object.entries(status).map(([key, value]) => (
-        <div key={key} className={`rounded-md px-3 py-2 text-sm font-bold ${value.ok ? "bg-[var(--surface-soft)] text-primary" : "bg-[var(--danger-soft)] text-[var(--danger)]"}`}>
-          {key}: {value.ok ? "已取得" : value.error || "未取得"}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function RawFieldList({ data, ignored = [] }) {
   const rows = objectToRows(data, [...ignored, ...ignoredRawFields]);
   if (!rows.length) return null;
@@ -1969,10 +1984,15 @@ function normalizeGenericIcons(data, preferredKeys = [], fallbackName = "項目"
 }
 
 function normalizeAbility(data, preset = 1) {
-  const presetRows = data?.[`ability_preset_${preset}`]?.ability_info;
+  const presetData = data?.[`ability_preset_${preset}`];
+  const presetRows = presetData?.ability_info;
   const rows = Array.isArray(presetRows) && presetRows.length ? presetRows : data?.ability_info || [];
-  if (!Array.isArray(rows)) return [];
-  return rows.map((item) => item.ability_value || item.description || item.ability_no || item.name).filter(Boolean);
+  const grade = presetData?.ability_preset_grade || presetData?.ability_grade || data?.ability_grade || "";
+  const items = Array.isArray(rows)
+    ? rows.map((item) => item.ability_value || item.description || item.name).filter(Boolean)
+    : [];
+
+  return { grade, items };
 }
 
 function normalizeHyperStats(data, preset = 1) {
@@ -1996,13 +2016,35 @@ function normalizeSkills(data) {
 }
 
 function normalizeFamiliar(data) {
-  const summonedRaw = firstObject(data?.familiar_equipped, data?.equipped_familiar, data?.summoned_familiar, data?.summoned, data?.familiar_info);
-  const listRows = getFirstArray(data, ["familiar_list", "familiar", "familiar_group", "familiars"]);
+  const summonedRaw = firstObject(
+    data?.familiar_equipped,
+    data?.equipped_familiar,
+    data?.summoned_familiar,
+    data?.summoned,
+    data?.familiar_active,
+    data?.familiar_info,
+  );
+  const listRows = getFirstArray(data, [
+    "familiar_list",
+    "familiar",
+    "familiar_group",
+    "familiars",
+    "familiar_group_info",
+    "familiar_collection",
+    "familiar_card",
+    "familiar_cards",
+    "familiar_info",
+  ]);
   const groupEffects = uniqueLines([
-    ...normalizeTextLines(data?.familiar_effect),
-    ...normalizeTextLines(data?.familiar_group_effect),
-    ...normalizeTextLines(data?.familiar_option),
-    ...normalizeTextLines(data?.summary),
+    ...normalizeOptionLines(data?.familiar_effect),
+    ...normalizeOptionLines(data?.familiar_group_effect),
+    ...normalizeOptionLines(data?.familiar_group_effect_info),
+    ...normalizeOptionLines(data?.familiar_option),
+    ...normalizeOptionLines(data?.familiar_option_info),
+    ...normalizeOptionLines(data?.familiar_effect_info),
+    ...normalizeOptionLines(data?.familiar_badge_effect),
+    ...normalizeOptionLines(data?.familiar_set_effect),
+    ...normalizeOptionLines(data?.summary),
   ]);
   const list = listRows.map((item, index) => normalizeFamiliarItem(item, index + 1)).filter((item) => item.name || item.icon || item.effects.length);
   const summoned = summonedRaw ? normalizeFamiliarItem(summonedRaw, summonedRaw.familiar_no || 1) : list.find((item) => item.isEquipped) || null;
@@ -2012,12 +2054,12 @@ function normalizeFamiliar(data) {
 
 function normalizeFamiliarItem(item, no) {
   const effects = uniqueLines([
-    ...normalizeTextLines(item?.familiar_option),
-    ...normalizeTextLines(item?.familiar_effect),
-    ...normalizeTextLines(item?.familiar_potential),
-    ...normalizeTextLines(item?.option),
-    ...normalizeTextLines(item?.effect),
-    ...normalizeTextLines(item?.potential),
+    ...normalizeOptionLines(item?.familiar_option),
+    ...normalizeOptionLines(item?.familiar_effect),
+    ...normalizeOptionLines(item?.familiar_potential),
+    ...normalizeOptionLines(item?.option),
+    ...normalizeOptionLines(item?.effect),
+    ...normalizeOptionLines(item?.potential),
   ]);
 
   return {
@@ -2027,9 +2069,11 @@ function normalizeFamiliarItem(item, no) {
     grade: item?.familiar_grade || item?.grade || item?.rank || "",
     level: item?.familiar_level || item?.level || "",
     vip: Boolean(item?.vip || item?.familiar_vip || item?.is_vip),
-    expireDate: formatFamiliarDate(item?.familiar_date_expire || item?.familiar_expire_date || item?.date_expire || item?.expire_date),
+    expireDate: formatFamiliarDate(
+      item?.familiar_date_expire || item?.familiar_expire_date || item?.date_expire || item?.expire_date,
+    ),
     effects,
-    isEquipped: Boolean(item?.familiar_equipped || item?.is_equipped || item?.equipped),
+    isEquipped: Boolean(item?.is_equipped || item?.equipped),
   };
 }
 
@@ -2199,15 +2243,67 @@ function groupUnionCharacters(blocks) {
   return Array.from(map.entries());
 }
 
-function normalizeTextLines(value) {
+// 萌獸等「option 型」資料專用：Nexon 常回傳 [{ option_no, option_name, option_value }, ...]
+// 這種帶編號/名稱/數值分開存放的陣列，必須組合成一行「名稱 +數值%」文字，
+// 不能把 option_no / option_name / option_value 這些原始欄位名稱直接印出來。
+function normalizeOptionLines(value) {
   if (value === undefined || value === null || value === "") return [];
-  if (Array.isArray(value)) return value.flatMap((item) => normalizeTextLines(item));
-  if (typeof value === "object") {
-    return Object.entries(value)
-      .filter(([, item]) => item !== undefined && item !== null && item !== "")
-      .map(([key, item]) => typeof item === "object" ? formatReadableValue(item) : `${key}: ${item}`);
+  if (Array.isArray(value)) return value.flatMap((item) => normalizeOptionLines(item));
+  if (typeof value !== "object") return [String(value)];
+
+  const name = value.option_name ?? value.name ?? value.effect_name ?? "";
+  const rawValue = value.option_value ?? value.value ?? value.effect_value ?? "";
+  const hasValue = rawValue !== undefined && rawValue !== null && rawValue !== "";
+  if (name && hasValue) return [formatOptionLine(String(name), rawValue)];
+
+  const description = value.description ?? value.effect ?? "";
+  if (Array.isArray(description)) return normalizeOptionLines(description);
+  if (typeof description === "string" && description) return [description];
+
+  return [];
+}
+
+// 若名稱帶有「(%)」/「（%）」或數值本身帶「%」，代表這是百分比屬性，需保留 % 後綴；
+// 其餘情況維持純數字（不亂猜測是否為百分比）。
+function formatOptionLine(name, value) {
+  const isPercentName = /[(（]\s*%\s*[)）]/.test(name);
+  const cleanName = name.replace(/[(（]\s*%\s*[)）]/g, "").trim();
+  const valueText = String(value).trim();
+  const hasPercentSign = valueText.endsWith("%");
+  const numericPart = hasPercentSign ? valueText.slice(0, -1) : valueText;
+  const numberValue = Number(numericPart);
+  const isNumeric = numericPart !== "" && Number.isFinite(numberValue);
+  const sign = isNumeric && numberValue > 0 ? "+" : "";
+  const displayValue = isNumeric ? `${sign}${numberValue}` : valueText;
+  const suffix = isPercentName || hasPercentSign ? "%" : "";
+
+  return `${cleanName} ${displayValue}${suffix}`.trim();
+}
+
+// 常見角色基本欄位（性向資訊、武陵道場最高紀錄等）的原始 key -> 中文標籤對照。
+// 找不到對照時退而求其次做基本轉換（去掉 _level 後綴、底線換空白），至少不要顯示原始英文 key。
+function getFieldLabel(key) {
+  if (FIELD_LABELS[key]) return FIELD_LABELS[key];
+  return String(key).replace(/_level$/, "").replaceAll("_", " ").trim();
+}
+
+// 依欄位名稱做特殊格式化：日期轉 YYYY/MM/DD、秒數轉「X分Y秒」、樓層加上「層」單位。
+function formatFieldValue(key, value) {
+  if (value === undefined || value === null || value === "") return "-";
+
+  if (key === "date_dojang_record") return String(value).slice(0, 10).replaceAll("-", "/");
+
+  if (key === "dojang_best_time") {
+    const seconds = Number(value);
+    if (!Number.isFinite(seconds) || seconds < 0) return String(value);
+    const minutes = Math.floor(seconds / 60);
+    const rest = Math.round(seconds % 60);
+    return minutes > 0 ? `${minutes}分${rest}秒` : `${rest}秒`;
   }
-  return [String(value)];
+
+  if (key === "dojang_best_floor") return `${value} 層`;
+
+  return value;
 }
 
 // 聯盟戰地相關效果（佔領效果／隊員效果／神器效果／冠軍效果）專用：
