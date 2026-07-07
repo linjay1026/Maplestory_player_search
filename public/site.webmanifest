@@ -1,0 +1,17 @@
+{
+  "name": "新楓之谷角色資料查詢",
+  "short_name": "楓之谷角色查詢",
+  "description": "查詢新楓之谷（MapleStory TW）台服角色公開資料，包含裝備、技能、聯盟戰地、萌獸與公會資訊。",
+  "start_url": "/character",
+  "display": "standalone",
+  "background_color": "#f6f2e8",
+  "theme_color": "#23695f",
+  "lang": "zh-Hant",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}
