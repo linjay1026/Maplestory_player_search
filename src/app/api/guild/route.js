@@ -15,7 +15,7 @@ export async function GET(request) {
   }
 
   if (!process.env.NEXON_API_KEY) {
-    return NextResponse.json({ error: "缺少 NEXON_API_KEY，請先建立 .env.local。" }, { status: 500 });
+    return NextResponse.json({ error: "伺服器未設定 NEXON_API_KEY，請檢查部署環境的環境變數設定。" }, { status: 500 });
   }
 
   try {
