@@ -64,7 +64,7 @@ export function UnionRaiderPixiBoard({ blocks, onSelect, selectedId }) {
       });
 
       if (cancelled || !host) {
-        app.destroy(true, { children: true, texture: true });
+        app.destroy(true, { children: true, texture: true, textureSource: true, context: true });
         return;
       }
 
@@ -119,7 +119,7 @@ export function UnionRaiderPixiBoard({ blocks, onSelect, selectedId }) {
     return () => {
       cancelled = true;
       if (appRef.current) {
-        appRef.current.destroy(true, { children: true, texture: true });
+        appRef.current.destroy(true, { children: true, texture: true, textureSource: true, context: true });
         appRef.current = null;
       }
       pixiRef.current = null;

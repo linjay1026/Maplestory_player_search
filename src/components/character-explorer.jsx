@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { CharacterProfile, CharacterProfileSkeleton } from "@/components/character-profile";
 import { SearchHistoryDialog, SearchPanel } from "@/components/search-panel";
@@ -8,14 +8,15 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { getDefaultQueryDate, isValidQueryDate } from "@/lib/date";
 import { readSearchHistory, saveSearchHistory } from "@/lib/search-history";
 
-export function CharacterExplorer() {
-  const [name, setName] = useState("");
+export function CharacterExplorer({ initialCharacterName = "" }) {
+  const [name, setName] = useState(initialCharacterName);
   const [selectedDate, setSelectedDate] = useState(() => getDefaultQueryDate());
   const [character, setCharacter] = useState(null);
   const [characters, setCharacters] = useState([]);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const hasAutoSearchedRef = useRef(false);
 
   useEffect(() => {
     // localStorage 只能在瀏覽器讀取，掛載後再同步，避免 SSR 輸出跟 client 端不一致。
@@ -24,9 +25,19 @@ export function CharacterExplorer() {
   }, []);
 
   useEffect(() => {
+    if (hasAutoSearchedRef.current) return;
+    hasAutoSearchedRef.current = true;
+
+    // /角色名稱 這類乾淨路徑，由伺服器端把角色名稱帶進來，掛載後直接查詢。
+    if (initialCharacterName) {
+      searchCharacter(initialCharacterName);
+      return;
+    }
+
+    // 相容舊的 /character?name=... 查詢字串連結。
     const queryName = new URLSearchParams(window.location.search).get("name");
     if (queryName) searchCharacter(queryName);
-    // Run once on first client render so /character?name=... opens the profile.
+    // Run once on first client render so existing shared links still open the profile.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -61,6 +72,7 @@ export function CharacterExplorer() {
 
       setCharacter(data);
       setCharacters(saveSearchHistory(data));
+      updateCharacterUrl(data.name || query);
     } catch (err) {
       setError(err instanceof Error ? err.message : "角色查詢失敗。");
     } finally {
@@ -115,4 +127,15 @@ export function CharacterExplorer() {
       />
     </main>
   );
+}
+
+// 查詢成功後把網址換成乾淨路徑（/角色名稱），不帶 date/query string。
+// 用 History API 直接改網址，不經過 Next.js router，避免觸發路由重新渲染而清空目前查詢結果的 state。
+function updateCharacterUrl(characterName) {
+  if (typeof window === "undefined" || !characterName) return;
+
+  const cleanPath = `/${encodeURIComponent(characterName)}`;
+  if (window.location.pathname === cleanPath) return;
+
+  window.history.replaceState(window.history.state, "", cleanPath);
 }

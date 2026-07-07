@@ -143,7 +143,7 @@ export function RankingView() {
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        <Link className="font-black text-[#171a20] hover:text-primary" href={`/character?name=${encodeURIComponent(item.name)}`}>
+                        <Link className="font-black text-[#171a20] hover:text-primary" href={`/${encodeURIComponent(item.name)}`}>
                           {item.name}
                         </Link>
                         <p className="text-sm text-[#6a604f]">{item.className || "-"}</p>

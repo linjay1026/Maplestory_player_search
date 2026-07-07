@@ -255,14 +255,14 @@ export function CharacterProfile({ character }) {
   useEffect(() => {
     const content = tabContentRef.current;
 
-    if (!content) return;
+    if (!content) return undefined;
 
     if (!isAnimatingRef.current) {
       gsap.set(content, { x: 0, opacity: 1 });
-      return;
+      return undefined;
     }
 
-    gsap.fromTo(
+    const tween = gsap.fromTo(
       content,
       { x: contentDirectionRef.current * 36, opacity: 0 },
       {
@@ -276,6 +276,9 @@ export function CharacterProfile({ character }) {
         },
       },
     );
+
+    // 換頁太快或元件卸載時，殺掉還在跑的 tween，避免疊加多個動畫或殘留 tick。
+    return () => tween.kill();
   }, [displayedTab]);
 
   async function openGuildDetail() {
@@ -1021,6 +1024,18 @@ function DetailModal({ data, guildData, guildError, isGuildLoading, onClose }) {
 function ShareCharacterDialog({ character, combatPower, onOpenChange, open, raw }) {
   const [copyState, setCopyState] = useState("idle");
   const shareUrl = useMemo(() => buildCharacterShareUrl(character), [character]);
+  const resetTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current);
+    };
+  }, []);
+
+  function scheduleCopyStateReset(delay) {
+    if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = window.setTimeout(() => setCopyState("idle"), delay);
+  }
 
   async function handleCopy() {
     if (!shareUrl) return;
@@ -1028,10 +1043,10 @@ function ShareCharacterDialog({ character, combatPower, onOpenChange, open, raw 
     try {
       await copyToClipboard(shareUrl);
       setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 1500);
+      scheduleCopyStateReset(1500);
     } catch {
       setCopyState("error");
-      window.setTimeout(() => setCopyState("idle"), 2200);
+      scheduleCopyStateReset(2200);
     }
   }
 
@@ -1426,19 +1441,22 @@ function TextList({ emptyText, items, tone = "default" }) {
 }
 
 function AbilityList({ data, emptyText = "尚無能力資料" }) {
-  const { grade, items } = data;
+  const { items } = data;
   if (!items.length) return <p className="text-sm text-[var(--text-muted)]">{emptyText}</p>;
-  const tier = getPotentialTier(grade);
-  const itemClassName = tier ? tier.chip : "bg-primary text-primary-foreground";
 
   return (
     <div className="grid gap-2">
-      {tier ? <span className={`w-fit rounded-md px-2 py-1 text-xs font-black ${tier.chip}`}>{tier.label}</span> : null}
-      {items.map((item, index) => (
-        <div key={`${item}-${index}`} className={`rounded-md px-3 py-2 text-sm font-bold ${itemClassName}`}>
-          {item}
-        </div>
-      ))}
+      {items.map((item) => {
+        const tier = getPotentialTier(item.grade);
+        const className = tier ? tier.chip : "bg-primary text-primary-foreground";
+
+        return (
+          <div key={item.no} className={`rounded-md px-3 py-2 text-sm font-bold ${className}`}>
+            {tier ? <span className="mr-1.5 text-xs font-black opacity-80">[{tier.label}]</span> : null}
+            {item.text}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1987,12 +2005,21 @@ function normalizeAbility(data, preset = 1) {
   const presetData = data?.[`ability_preset_${preset}`];
   const presetRows = presetData?.ability_info;
   const rows = Array.isArray(presetRows) && presetRows.length ? presetRows : data?.ability_info || [];
-  const grade = presetData?.ability_preset_grade || presetData?.ability_grade || data?.ability_grade || "";
+  // 外層 / preset 層的 ability_grade 只在該條 ability_info 自己沒有 ability_grade 時才拿來 fallback，
+  // 每一條內在潛能都要優先使用自己的 ability_grade 決定顏色（不能整包套同一色）。
+  const fallbackGrade = presetData?.ability_preset_grade || presetData?.ability_grade || data?.ability_grade || "";
   const items = Array.isArray(rows)
-    ? rows.map((item) => item.ability_value || item.description || item.name).filter(Boolean)
+    ? rows
+        .map((item, index) => ({
+          no: item?.ability_no ?? index + 1,
+          text: item?.ability_value || item?.description || item?.name || "",
+          grade: item?.ability_grade || fallbackGrade,
+        }))
+        .filter((item) => item.text)
+        .sort((a, b) => Number(a.no) - Number(b.no))
     : [];
 
-  return { grade, items };
+  return { grade: fallbackGrade, items };
 }
 
 function normalizeHyperStats(data, preset = 1) {
@@ -2478,12 +2505,10 @@ function formatDate(value) {
 }
 
 function buildCharacterShareUrl(character) {
-  if (!character || typeof window === "undefined") return "";
+  if (!character?.name || typeof window === "undefined") return "";
 
-  const params = [`name=${encodeURIComponent(character.name || "")}`];
-  if (character.world) params.push(`world=${encodeURIComponent(character.world)}`);
-
-  return `${window.location.origin}/character?${params.join("&")}`;
+  // 分享連結一律使用乾淨路徑（不帶 date / world / query string），例如 /吳獨秀x。
+  return `${window.location.origin}/${encodeURIComponent(character.name)}`;
 }
 
 async function copyToClipboard(text) {
